@@ -1,0 +1,6 @@
+#!/bin/sh
+# the old "Quran Hub" folder must go: two copies would both hook the channel changes
+if [ -d /usr/lib/enigma2/python/Plugins/Extensions/QuranHub ]; then
+    rm -rf /usr/lib/enigma2/python/Plugins/Extensions/QuranHub
+fi
+exit 0

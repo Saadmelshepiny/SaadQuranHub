@@ -1,0 +1,4 @@
+#!/bin/sh
+rm -rf /usr/lib/enigma2/python/Plugins/Extensions/QuranHub
+echo "Saad Quran Hub 1.3 installed. Restart the GUI (init 4 && init 3) to see the plugin."
+exit 0
