@@ -58,7 +58,7 @@ from . import library
 from . import tgbot
 from . import localserve
 
-PLUGIN_VERSION = "1.0.3"
+PLUGIN_VERSION = "1.0.4"
 GITHUB_REPO = "Saadmelshepiny/SaadQuranHub"
 GITHUB_INFO = "https://raw.githubusercontent.com/%s/main/version.json" % GITHUB_REPO
 
@@ -4940,12 +4940,12 @@ class QHPaged(Screen):
                 self["rd_hint"].show()
                 return
             names = [(n, tajweed.ON_PAPER.get(c, c) if self.light_page() else c) for _k, n, c in tajweed.RULES]
-            text = u"   ".join(u"■ " + n for n, _c in names)
+            text = u"   ".join(u"• " + n for n, _c in names)
             cols, pos = {}, 0
             for n, c in names:
-                for k in range(len(u"■ " + n)):
+                for k in range(len(u"• " + n)):
                     cols[pos + k] = c
-                pos += len(u"■ " + n) + 3
+                pos += len(u"• " + n) + 3
             h = p(34)
             pix, iw = text_pixmap(text, int(h / 1.7), 0xffffff, h, cols)
             if pix is None:
