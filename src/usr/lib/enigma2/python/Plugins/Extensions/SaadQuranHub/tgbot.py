@@ -193,6 +193,33 @@ class TgBot(object):
                                                           "performer": u"Saad Quran Hub"}, "audio", path), done)
 
 
+def _send_document(self, chat, path, caption=u"", done=None):
+    return self._bg(lambda: self.upload("sendDocument", {"chat_id": chat, "caption": caption[:900]}, "document", path), done)
+
+
+def _send_media_group(self, chat, urls, caption=u""):
+    """Up to 10 audio files by URL in one message (Telegram fetches them itself)."""
+    media = []
+    for i, u in enumerate(urls[:10]):
+        m = {"type": "audio", "media": u}
+        if i == 0 and caption:
+            m["caption"] = caption[:900]
+        media.append(m)
+    return self._bg(lambda: self.call("sendMediaGroup", {"chat_id": chat, "media": media}, timeout=60))
+
+
+def _download(self, file_id):
+    """Bytes of a file the user sent to the bot (backups to restore)."""
+    info = self.call("getFile", {"file_id": file_id})
+    req = Request("https://api.telegram.org/file/bot%s/%s" % (self.token, info["file_path"]),
+                  headers={"User-Agent": data.UA})
+    return self._open(req, 60)
+
+
+TgBot.send_document = _send_document
+TgBot.send_media_group = _send_media_group
+TgBot.download = _download
+
 COMMANDS = [
     {"command": "now", "description": u"التشغيل الآن وأزرار التحكم"},
     {"command": "search", "description": u"البحث عن قارئ"},
@@ -202,6 +229,9 @@ COMMANDS = [
     {"command": "ayah", "description": u"آية اليوم مع تفسيرها"},
     {"command": "marks", "description": u"علاماتي (المواضع المحفوظة)"},
     {"command": "speed", "description": u"سرعة التلاوة"},
+    {"command": "wird", "description": u"ورد الحفظ أو المراجعة الآن"},
+    {"command": "backup", "description": u"نسخة احتياطية من الإعدادات"},
+    {"command": "station", "description": u"رابط إذاعتي الخاصة"},
     {"command": "stop", "description": u"إيقاف التشغيل"},
     {"command": "help", "description": u"المساعدة"},
 ]

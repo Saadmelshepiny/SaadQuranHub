@@ -6,5 +6,7 @@ IPK=$(wget -q --no-check-certificate "$REPO/version.json" -O - | sed -n 's/.*"ip
 [ -z "$IPK" ] && { echo "Cannot reach GitHub"; exit 1; }
 wget -q --no-check-certificate "$IPK" -O /tmp/saadquranhub.ipk || { echo "Download failed"; exit 1; }
 opkg install --force-reinstall /tmp/saadquranhub.ipk && rm -f /tmp/saadquranhub.ipk
+# later updates also come from the receiver's own "software update" (opkg feed)
+echo "src/gz saadquranhub $REPO/feed" > /etc/opkg/saadquranhub-feed.conf
 echo "Saad Quran Hub installed - restarting the GUI ..."
 killall -9 enigma2 >/dev/null 2>&1

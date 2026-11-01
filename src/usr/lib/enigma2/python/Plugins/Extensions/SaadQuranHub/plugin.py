@@ -57,8 +57,9 @@ from . import tajweed
 from . import library
 from . import tgbot
 from . import localserve
+from . import i18n
 
-PLUGIN_VERSION = "1.0.4"
+PLUGIN_VERSION = "1.1"
 GITHUB_REPO = "Saadmelshepiny/SaadQuranHub"
 GITHUB_INFO = "https://raw.githubusercontent.com/%s/main/version.json" % GITHUB_REPO
 
@@ -210,6 +211,10 @@ def qlog(msg):
             os.remove(LOG_PATH)
         with open(LOG_PATH, "ab") as f:
             f.write((u"%s %s\n" % (time.strftime("%H:%M:%S"), msg)).encode("utf-8"))
+    except Exception:
+        pass
+    try:
+        note_error(u"%s" % (msg,))
     except Exception:
         pass
 
@@ -1220,6 +1225,10 @@ class Hub16Bg(object):
             self.process_events()
         except Exception as e:
             qlog("events: %r" % (e,))
+        try:
+            self.tick18()
+        except Exception as e:
+            qlog("tick18: %r" % (e,))
         if self.bot is None:
             return
         for u in self.bot.poll():
@@ -1289,7 +1298,8 @@ class Hub16Bg(object):
     HELP = (u"📖 Saad Quran Hub\n"
             u"• اكتب اسم قارئ للبحث في كل المواقع، ثم اختر السورة لتعمل على التلفزيون.\n"
             u"• /now التشغيل الآن وأزرار التحكم\n• /radio الإذاعات\n• /lib مكتبتي (تشغيل أو إرسال الملفات)\n"
-            u"• /dl حالة التنزيلات\n• /ayah آية اليوم\n• /marks علاماتي\n• /speed سرعة التلاوة\n• /stop إيقاف")
+            u"• /dl حالة التنزيلات\n• /ayah آية اليوم\n• /marks علاماتي\n• /speed سرعة التلاوة\n• /stop إيقاف\n"
+            u"• /wird ورد الحفظ الآن\n• /backup نسخة احتياطية (أرسل الملف لاحقاً للاستعادة)\n• /station رابط إذاعتي الخاصة")
 
     def tg_handle(self, u):
         if "callback_query" in u:
@@ -1297,6 +1307,8 @@ class Hub16Bg(object):
         m = u.get("message") or {}
         chat = (m.get("chat") or {}).get("id")
         text = (m.get("text") or u"").strip()
+        if chat and m.get("document") and self.tg_is_owner(chat):
+            return self.tg_restore_file(chat, m["document"])
         if not chat or not text:
             return
         if not self.tg_is_owner(chat):
@@ -1333,6 +1345,13 @@ class Hub16Bg(object):
             b.send(chat, u"اكتب اسم القارئ (مثلاً: المنشاوي)")
         elif cmd == u"/search":
             self.tg_search(chat, arg)
+        elif cmd == u"/wird":
+            self.tg_wird(chat)
+        elif cmd == u"/backup":
+            self.tg_backup(chat)
+        elif cmd == u"/station":
+            url = self.station_url()
+            b.send(chat, (u"📻 إذاعتي الخاصة (من شبكة البيت فقط):\n%s" % url) if url else u"تعذّر تشغيل الإذاعة")
         elif cmd:
             b.send(chat, self.HELP)
         else:
@@ -1469,6 +1488,12 @@ class Hub16Bg(object):
         b.answer(cq.get("id"))
         p_ = d.split(":")
         k = p_[0]
+        if k == "BK":
+            cfg, self.restore_pending = self.restore_pending, None
+            if p_[1] == "ok" and cfg:
+                self.restore_from(cfg)
+                return b.send(chat, u"✅ تمت الاستعادة - أعد فتح البلاجين لتظهر الإعدادات")
+            return b.send(chat, u"أُلغيت الاستعادة")
         if k == "c":
             act = p_[1]
             if act == "pp":
@@ -1859,7 +1884,308 @@ class Hub17Bg(object):
         self.runner.run(run, done, done)
 
 
-class Background(Hub16Bg, Hub17Bg):
+
+BUILD = 18             # one number for both editions (the "what's new" screen and the changelog)
+CHANGELOG = [
+    (18, [u"وضع رمضان: تنبيه قبل الإفطار والسحور، جزء كل ليلة بقارئ تختاره، وتذكير بليالي العشر الأواخر",
+          u"تذكير بالمناسبات الهجرية: عرفة، العيدان، عاشوراء، الأيام البيض، بداية رمضان",
+          u"ورد الحفظ أو المراجعة يصلك على تليجرام كل يوم بالصوت والنص",
+          u"نسخة احتياطية أسبوعية على تليجرام، واستعادتها بإرسال الملف للبوت",
+          u"إذاعتي الخاصة: مكتبتك بلا توقف على الريسيفر، وبرابط لأي جهاز في البيت",
+          u"مؤقت النوم يخفض الصوت تدريجياً ثم يدخل الجهاز وضع الانتظار",
+          u"الوضع المبسّط لكبار السن، والواجهة بالإنجليزية (القائمة > المظهر > اللغة)",
+          u"مصدر التحديث الرسمي (feed) وهذه الشاشة بعد كل تحديث"]),
+    (17, [u"مكتبة الـHDD كمصدر، والمشغّل الكبير: السرعة، التكرار، العلامات، «التالي»، باقة المفضلة"]),
+    (16, [u"البحث عن قارئ في كل المواقع، التنزيل بأي صيغة، مكتبتي، بوت تليجرام"]),
+]
+FEED_CONF = "/etc/opkg/saadquranhub-feed.conf"
+FEED_URL = "https://raw.githubusercontent.com/%s/main/feed" % GITHUB_REPO
+ERRBUF = []
+_ERR_WORDS = ("Error", "Exception", "error:", "failed", "Traceback", "errno")
+
+
+def note_error(line):
+    if any(w in line for w in _ERR_WORDS):
+        ERRBUF.append(u"%s %s" % (time.strftime("%H:%M:%S"), line))
+        del ERRBUF[:-40]
+
+
+def whats_new_text(since=0):
+    out = []
+    for b, lines in CHANGELOG:
+        if b > since:
+            out += [u"•  " + l for l in lines]
+    return out
+
+
+class Hub18Bg(object):
+    """1.8: Ramadan + hijri occasions, the daily passage / weekly backup / error reports on Telegram,
+    'my station', sleep fade-out, update feed."""
+    t18 = 0
+    fade = None
+    station = None
+    err_sent = 0
+    restore_pending = None
+
+    def tick18(self):
+        now = time.time()
+        if now - self.t18 < 20:
+            return
+        self.t18 = now
+        try:
+            self.fade_tick(now)
+        except Exception as e:
+            qlog("fade: %r" % (e,))
+        lt = time.localtime(now)
+        hm = "%02d:%02d" % (lt.tm_hour, lt.tm_min)
+        today = time.strftime("%Y-%m-%d", lt)
+        fired = self.cfg.setdefault("fired18", {})
+
+        def once(key):
+            if fired.get(key) == today:
+                return False
+            fired[key] = today
+            self.save()
+            return True
+        try:
+            self.ramadan_tick(now, hm, once)
+        except Exception as e:
+            qlog("ramadan: %r" % (e,))
+        try:
+            if self.cfg.get("occasions", True) and hm >= "20:00" and once("occasion"):
+                occ = studio.occasion_for(now + 86400, studio.hijri_adjust(self.cfg))
+                if occ:
+                    msg = u"🌙 غداً بإذن الله: %s" % occ
+                    popup(msg, 12)
+                    self.tg_notify(msg)
+        except Exception as e:
+            qlog("occasion: %r" % (e,))
+        if self.bot is not None:
+            try:
+                if self.cfg.get("tg_wird_time") and hm >= self.cfg["tg_wird_time"] and once("tg_wird"):
+                    for o in self.tg_owners():
+                        self.tg_wird(o["id"])
+                if self.cfg.get("tg_backup", True) and lt.tm_wday == 4 and hm >= "10:00" and once("tg_backup"):
+                    for o in self.tg_owners():
+                        self.tg_backup(o["id"])
+                if (self.cfg.get("tg_errors", private_edition()) and ERRBUF and now - self.err_sent > 1800):
+                    self.err_sent = now
+                    lines, ERRBUF[:] = list(ERRBUF), []
+                    self.tg_notify(u"⚠️ أخطاء البلاجين (%s):\n%s" % (PLUGIN_VERSION, u"\n".join(lines[-15:])[:3500]))
+            except Exception as e:
+                qlog("tg18: %r" % (e,))
+
+    # -- sleep: fade out, then standby ----------------------------------------------------------
+    def fade_tick(self, now):
+        if self.sleep_at and Player.active:
+            left = self.sleep_at - now
+            if left <= 300:
+                if self.fade is None:
+                    v = self.get_volume()
+                    if v is None:
+                        return
+                    self.fade = {"v0": v}
+                target = int(self.fade["v0"] * max(0.0, left) / 300.0)
+                v = self.get_volume()
+                if v is not None and abs(v - target) >= 2:
+                    self.set_volume(max(0, target))
+            return
+        if self.fade is not None and not Player.active:          # the sleep timer has stopped the Quran
+            v0 = self.fade["v0"]
+            self.fade = None
+            self.set_volume(v0)
+            if self.cfg.get("sleep_standby", True):
+                try:
+                    from Screens.Standby import Standby, inStandby
+                    if not inStandby:
+                        from Tools import Notifications
+                        Notifications.AddNotification(Standby)
+                except Exception as e:
+                    qlog("standby: %r" % (e,))
+        elif self.fade is not None and not self.sleep_at:        # timer cancelled
+            self.set_volume(self.fade["v0"])
+            self.fade = None
+
+    # -- Ramadan -------------------------------------------------------------------------------
+    def ramadan_on(self, ts=None):
+        mode = self.cfg.get("ramadan", "auto")
+        if mode == "off":
+            return 0
+        return studio.ramadan_today(self.cfg, ts)
+
+    def ramadan_tick(self, now, hm, once):
+        d = self.ramadan_on(now)
+        city = self.cfg.get("prayer_city")
+        if not d or not city:
+            return
+        pt = extras.today_prayers(city, now)
+        if not pt:
+            return
+        mins = lambda h: (int(h) * 60 + int(round((h - int(h)) * 60)))
+        cur = time.localtime(now).tm_hour * 60 + time.localtime(now).tm_min
+        mg, fj, isha = mins(pt["maghrib"]), mins(pt["fajr"]), mins(pt["isha"])
+        if 0 <= mg - cur <= 15 and once("iftar"):
+            msg = u"🌙 باقي %d دقيقة على أذان المغرب (الإفطار) - رمضان %d" % (mg - cur, d)
+            popup(msg, 15)
+            self.tg_notify(msg)
+        if 0 <= fj - cur <= 30 and once("suhoor"):
+            msg = u"🌙 باقي %d دقيقة على أذان الفجر (الإمساك)" % (fj - cur)
+            popup(msg, 15)
+            self.tg_notify(msg)
+        if cur >= isha + 20 and once("juz"):
+            juz = min(30, d)
+            if d + 1 in (21, 23, 25, 27, 29):
+                note = u"\nالليلة ليلة %d من رمضان (من ليالي العشر الأواخر)" % (d + 1)
+            else:
+                note = u""
+            self.tg_notify(u"📖 جزء الليلة: الجزء %d%s" % (juz, note))
+            self.ramadan_ask(juz, note)
+
+    def ramadan_ask(self, juz, note=u""):
+        text = u"ختمة رمضان: حان وقت الجزء %d.%s\n\nتشغيله الآن؟" % (juz, note)
+
+        def answer(ok=None):
+            if ok:
+                self.play_juz(juz)
+        try:
+            from Tools import Notifications
+            from Screens.MessageBox import MessageBox
+            Notifications.AddNotificationWithCallback(answer, MessageBox, text, MessageBox.TYPE_YESNO, timeout=120)
+        except Exception:
+            popup(text, 15)
+
+    def play_juz(self, juz):
+        items = studio.juz_items(juz, int(self.cfg.get("ramadan_rec", 0)))
+        if items:
+            self.ctx = None
+            self.play_list(items, 0)
+            self.set_status(u"ختمة رمضان: الجزء %d (%d آية)" % (juz, len(items)), notify=True)
+
+    # -- Telegram: daily passage, weekly backup, restore ----------------------------------------------
+    def tg_wird(self, chat):
+        n, a1, a2, why = studio.wird_passage(self.cfg)
+        verses = dict(extras.local_verses(n) or [])
+        a2 = min(a2, a1 + 9)
+        text = u"📖 %s: سورة %s من آية %d إلى %d\n\n%s" % (
+            why, data.surah_name(n), a1, a2,
+            u"\n".join(u"﴿%s﴾ (%d)" % (extras.sanitize(verses.get(a, u"")), a) for a in range(a1, a2 + 1)))
+        self.bot.send(chat, text)
+        rec = studio.hifz_state(self.cfg)["rec"]
+        urls = [studio.ayah_url(n, a, rec) for a in range(a1, a2 + 1)]
+        self.bot.send_media_group(chat, urls, u"%s - سورة %s (%d-%d)" % (studio.HIFZ_RECITERS[rec][0], data.surah_name(n), a1, a2))
+
+    def tg_backup(self, chat):
+        path = "/tmp/saadquranhub_backup.json"
+        cfg = dict(self.cfg)
+        for k in ("tg_token", "tg_owners", "remote_pin"):
+            cfg.pop(k, None)                       # never inside a file that leaves the receiver
+        with open(path, "wb") as f:
+            f.write(json.dumps(cfg, ensure_ascii=False, indent=1).encode("utf-8"))
+        self.bot.send_document(chat, path, u"💾 نسخة احتياطية من إعدادات Saad Quran Hub (%s)\n"
+                                           u"للاستعادة على أي جهاز: أرسل هذا الملف للبوت." % time.strftime("%Y-%m-%d"))
+
+    def tg_restore_file(self, chat, doc):
+        name = (doc.get("file_name") or u"").lower()
+        if not name.endswith(".json"):
+            return self.bot.send(chat, u"أرسل ملف النسخة الاحتياطية (json) لاستعادته")
+        b = self.bot
+
+        def job():
+            raw = b.download(doc["file_id"])
+            cfg = json.loads(raw.decode("utf-8"))
+            if not isinstance(cfg, dict) or not any(k in cfg for k in ("fav", "hist", "theme", "pls", "reader_pos")):
+                raise ValueError(u"ليس ملف نسخة احتياطية من Saad Quran Hub")
+            return cfg
+
+        def done(res):
+            if isinstance(res, Exception):
+                return b.send(chat, u"تعذّر قراءة الملف: %s" % res)
+            self.restore_pending = res
+            b.send(chat, u"♻️ وجدت نسخة احتياطية فيها %d إعداداً (المفضلة: %d). استعادتها على هذا الريسيفر؟" % (
+                len(res), len(res.get("fav") or [])), [[{"text": u"♻️ نعم، استعادة", "callback_data": "BK:ok"},
+                                                       {"text": u"إلغاء", "callback_data": "BK:no"}]])
+        Runner().run(job, done, done)
+
+    def restore_from(self, cfg):
+        keep = dict((k, self.cfg.get(k)) for k in ("tg_token", "tg_owners", "remote_pin") if k in self.cfg)
+        self.cfg.update(cfg)
+        self.cfg.update(keep)
+        self.save()
+
+    # -- my station ----------------------------------------------------------------------------
+    def station_files(self):
+        out = []
+        try:
+            for _rec, _f, items in library.scan():
+                out += [x[2] for x in items]
+        except Exception:
+            pass
+        for d in self.cfg.get("disk_srcs", []):
+            try:
+                for _n, folder in library.disk_reciters(d["path"]):
+                    out += [p_ for _n2, _l, p_ in library.disk_tracks(folder)]
+            except Exception:
+                continue
+        return out
+
+    def station_items(self, rec=None, shuffle=True):
+        import random
+        items = []
+        try:
+            groups = library.scan()
+        except Exception:
+            groups = []
+        for d in self.cfg.get("disk_srcs", []):
+            try:
+                for name, folder in library.disk_reciters(d["path"]):
+                    its = [(n, l, p_, 0, os.path.splitext(p_)[1]) for n, l, p_ in library.disk_tracks(folder)]
+                    groups.append((name.split(u" - ")[-1], folder, its))
+            except Exception:
+                continue
+        for r, _f, its in groups:
+            if rec is None or r == rec:
+                items += library.payloads(its, r)
+        if shuffle:
+            random.shuffle(items)
+        for it in items:
+            it["autonext"] = True
+        return items, [g[0] for g in groups]
+
+    def station_play(self, rec=None, shuffle=True):
+        items, _recs = self.station_items(rec, shuffle)
+        if not items:
+            return self.set_status(u"المكتبة فارغة - نزّل قارئاً أو أضف مجلداً من القرص", notify=True)
+        self.ctx = None
+        self.play_list(items, 0)
+        self.set_status(u"📻 إذاعتي الخاصة: %d ملف%s" % (len(items), u" (عشوائي)" if shuffle else u""), notify=True)
+
+    def station_url(self):
+        """Start the home stream (once) and give its address."""
+        if not self.cfg.get("remote_pin"):
+            import random
+            self.cfg["remote_pin"] = "%04d" % random.randint(0, 9999)
+            self.save()
+        if self.station is None:
+            try:
+                self.station = localserve.HomeRadio(self.station_files, self.cfg["remote_pin"])
+            except Exception as e:
+                qlog("station: %r" % (e,))
+                return None
+        return u"http://%s:%d/radio/%s.mp3" % (remote.local_ip(), localserve.HomeRadio.PORT, self.cfg["remote_pin"])
+
+    # -- update feed -----------------------------------------------------------------------------
+    def feed_add(self):
+        try:
+            with open(FEED_CONF, "w") as f:
+                f.write("src/gz saadquranhub %s\n" % FEED_URL)
+            self.set_status(u"أُضيف مصدر التحديث الرسمي - التحديثات تصل من «تحديث البرامج» في الجهاز", notify=True)
+            return True
+        except Exception as e:
+            self.set_status(u"تعذّرت إضافة المصدر: %s" % e, notify=True)
+            return False
+
+
+class Background(Hub16Bg, Hub17Bg, Hub18Bg):
     """Everything that must survive closing/minimising the screen."""
 
     def __init__(self):
@@ -1913,6 +2239,7 @@ class Background(Hub16Bg, Hub17Bg):
     # -- setup --------------------------------------------------------------
     def attach(self, session):
         self.session = session
+        i18n.LANG[0] = self.cfg.get("lang", "ar")
         if not self.hooked:
             try:
                 session.nav.event.append(self.on_event)
@@ -6700,6 +7027,13 @@ class QuranHub(Screen):
 
     def qh_start(self):
         self.build_sections()
+        seen = int(BG.cfg.get("seen_build", 0) or 0)
+        if seen < BUILD:
+            BG.cfg["seen_build"] = BUILD
+            BG.save()
+            if seen or BG.cfg.get("hist") or BG.cfg.get("fav"):     # an update, not a first install
+                self.qh_wn_timer, self._cw = make_timer(lambda: self.show_whats_new(seen))
+                self.qh_wn_timer.start(800, True)
         self.fetch_tg_pictures()
         BG.load_timing_reads()
         bad = BG.health_bad()
@@ -6811,6 +7145,7 @@ class QuranHub(Screen):
         w, h = COL_W[0], ROW_H
         ic = min(ICON_PX, h - p(4))
         hs = (BG.cfg.get("src_health") or {}).get(key)
+        label = i18n.T(label)
         kw = dict(pos=(p(6), 0), size=(w - ic - p(20), h), font=0, flags=RT_HALIGN_RIGHT | RT_VALIGN_CENTER, text=label)
         if hs and not hs[0]:
             kw.update(text=label + u" (متوقف)", color=0xff7b7b, color_sel=0xffd0d0)
@@ -6877,7 +7212,7 @@ class QuranHub(Screen):
             t = titles[i]
             if self.qh_q[i]:
                 t += u"  [بحث: %s]" % self.qh_q[i]
-            self[HDRS[i]].setText(t)
+            self[HDRS[i]].setText(i18n.T(t))
 
     def set_focus(self, col):
         self.qh_focus = max(0, min(col, self.max_focus()))
@@ -7110,9 +7445,84 @@ class QuranHub(Screen):
     def _choice(self, title, opts, cb):
         try:
             from Screens.ChoiceBox import ChoiceBox
+            if i18n.on():
+                title, opts = i18n.T(title), [(i18n.T(o[0]),) + tuple(o[1:]) for o in opts]
             self.session.openWithCallback(cb, ChoiceBox, title=title, list=opts)
         except Exception as e:
             self.qh_status_text(u"تعذّر فتح القائمة: %s" % e)
+
+    # ================================================================== 1.8 menus
+    def menu_ramadan(self):
+        cfg = BG.cfg
+        d = BG.ramadan_on()
+        mode = {"auto": u"تلقائي في رمضان", "off": u"متوقف"}.get(cfg.get("ramadan", "auto"), u"تلقائي في رمضان")
+        adj = studio.hijri_adjust(cfg)
+        it = [(u"التاريخ الهجري اليوم: %s" % studio.hijri_text(adjust=adj), lambda: None),
+              (u"تصحيح التاريخ الهجري: %+d يوم (اضغط للتغيير)" % adj, self.hijri_adjust_next),
+              (u"وضع رمضان: %s" % mode, self.ramadan_toggle),
+              (u"قارئ ختمة رمضان: %s" % studio.HIFZ_RECITERS[int(cfg.get("ramadan_rec", 0))][0], self.ramadan_rec_pick),
+              (u"تذكير المناسبات الهجرية: %s" % self._on(cfg.get("occasions", True)),
+               lambda: BG.toggle_flag("occasions", True, u"تذكير المناسبات الهجرية"))]
+        if d:
+            it.insert(0, (u"تشغيل جزء الليلة الآن (الجزء %d)" % min(30, d), lambda: BG.play_juz(min(30, d))))
+        it.append((u"تشغيل جزء معيّن ...", lambda: self._choice(u"اختر الجزء", [(u"الجزء %d" % j, j) for j in range(1, 31)],
+                                                                 lambda c: c and BG.play_juz(c[1]))))
+        if not cfg.get("prayer_city"):
+            it.append((u"(تنبيه الإفطار والسحور يحتاج مدينة الصلاة: القائمة > الصلاة)", lambda: None))
+        self._menu(u"رمضان والمناسبات", it)
+
+    def hijri_adjust_next(self):
+        order = [0, 1, 2, -2, -1]
+        cur = studio.hijri_adjust(BG.cfg)
+        BG.cfg["hijri_adj"] = order[(order.index(cur) + 1) % len(order)]
+        BG.save()
+        self.qh_status_text(u"التاريخ الهجري: %s" % studio.hijri_text(adjust=BG.cfg["hijri_adj"]))
+
+    def ramadan_toggle(self):
+        BG.cfg["ramadan"] = "off" if BG.cfg.get("ramadan", "auto") == "auto" else "auto"
+        BG.save()
+        self.qh_status_text(u"وضع رمضان: %s" % (u"تلقائي" if BG.cfg["ramadan"] == "auto" else u"متوقف"))
+
+    def ramadan_rec_pick(self):
+        self._choice(u"قارئ ختمة رمضان", [(r[0], i) for i, r in enumerate(studio.HIFZ_RECITERS)],
+                     lambda c: c and (BG.cfg.__setitem__("ramadan_rec", c[1]), BG.save()))
+
+    def menu_station(self):
+        it = [(u"إذاعتي الخاصة: كل المكتبة عشوائياً", lambda: BG.station_play(None, True)),
+              (u"إذاعتي الخاصة: كل المكتبة بالترتيب", lambda: BG.station_play(None, False)),
+              (u"إذاعتي الخاصة: قارئ واحد ...", self.station_one),
+              (u"رابط الإذاعة لأجهزة البيت ...", self.station_link)]
+        self._menu(u"إذاعتي الخاصة", it)
+
+    def station_one(self):
+        _items, recs = BG.station_items(None, False)
+        if not recs:
+            return self.qh_status_text(u"المكتبة فارغة")
+        self._choice(u"اختر القارئ", [(r, r) for r in recs], lambda c: c and BG.station_play(c[1], False))
+
+    def station_link(self):
+        url = BG.station_url()
+        if not url:
+            return self.qh_status_text(u"تعذّر تشغيل إذاعة البيت")
+        _studio_info(self.session, u"افتح هذا الرابط من الجوال أو أي جهاز على نفس شبكة البيت:\n\n%s\n\n"
+                                   u"(ملفات MP3 من مكتبتك تعمل بلا توقف وبترتيب عشوائي)" % url)
+
+    def menu_lang(self):
+        self._choice(u"اللغة / Language", [(u"العربية", "ar"), (u"English", "en")], self._lang_set)
+
+    def _lang_set(self, c=None):
+        if not c:
+            return
+        BG.cfg["lang"] = c[1]
+        BG.save()
+        i18n.LANG[0] = c[1]
+        self.color_labels()
+        self.build_sections(self.qh_extra_sec)
+        self.qh_status_text(u"Language: English" if c[1] == "en" else u"اللغة: العربية")
+
+    def show_whats_new(self, since=0):
+        lines = whats_new_text(since) or whats_new_text(0)
+        self.session.open(QHText, u"ما الجديد في Saad Quran Hub %s" % PLUGIN_VERSION, [u"\n".join(lines)], u"", False)
 
     @staticmethod
     def _on(flag):
@@ -7158,6 +7568,8 @@ class QuranHub(Screen):
                (u"السجل • الأكثر استماعاً • قوائمي • المحفوظات ...", self.menu_library),
                (u"بحث شامل في كل المواقع ...", self.search_global),
                (u"الصلاة والجدولة والتذكيرات ...", self.menu_time),
+               (u"🌙 رمضان والمناسبات ...", self.menu_ramadan),
+               (u"📻 إذاعتي الخاصة ...", self.menu_station),
                (u"المظهر والعرض والاختصارات ...", self.menu_display),
                (u"التحكم من الجوال ...", self.menu_phone),
                (u"قنوات تليجرام (إضافة / حذف) ...", self.menu_tg),
@@ -7351,6 +7763,12 @@ class QuranHub(Screen):
     def menu_display(self):
         cfg = BG.cfg
         self._menu(u"القناة والعرض والتحكم", [
+            (u"اللغة / Language: %s" % (u"English" if i18n.on() else u"العربية"), self.menu_lang),
+            (u"الوضع المبسّط (لكبار السن): %s" % self._on(cfg.get("simple_mode", False)),
+             lambda: BG.toggle_flag("simple_mode", False, u"الوضع المبسّط - يظهر عند فتح البلاجين")),
+            (u"مؤقت النوم: خفض الصوت تدريجياً ثم الانتظار: %s" % self._on(cfg.get("sleep_standby", True)),
+             lambda: BG.toggle_flag("sleep_standby", True, u"الانتظار بعد مؤقت النوم")),
+            (u"ما الجديد في هذا الإصدار", self.show_whats_new),
             (u"القرآن مع صورة القناة ...", self.menu_tv),
             (u"العودة إلى البث المباشر", BG.go_live),
             (u"ذاكرة الرجوع للخلف للإذاعات: %s" % self._on(cfg.get("timeshift", True)), BG.toggle_timeshift),
@@ -7481,13 +7899,13 @@ class QuranHub(Screen):
 
     def color_labels(self):
         for c in ("red", "green", "yellow", "blue"):
-            self["qh_" + c].setText(self.key_action(c)[1])
+            self["qh_" + c].setText(i18n.T(self.key_action(c)[1]))
         self.button_labels()
 
     def button_labels(self):
         for widget, k in self.BUTTON_KEYS:
             aid, label, _m = self.key_action(k)
-            self[widget].setText(u"%s (%s)" % (self.action_text(aid, label), k))
+            self[widget].setText(u"%s (%s)" % (i18n.T(self.action_text(aid, label)), k))
 
     def menu_colors(self):
         self._menu(u"اختر زراً لتخصيصه", [
@@ -7695,6 +8113,8 @@ class QuranHub(Screen):
     def _choice_at(self, title, opts, cb, sel=0):
         try:
             from Screens.ChoiceBox import ChoiceBox
+            if i18n.on():
+                title, opts = i18n.T(title), [(i18n.T(o[0]),) + tuple(o[1:]) for o in opts]
             try:
                 self.session.openWithCallback(cb, ChoiceBox, title=title, list=opts, selection=max(0, sel))
             except TypeError:
@@ -7947,8 +8367,25 @@ class QuranHub(Screen):
               (u"آية الصباح على تليجرام: %s" % (cfg.get("tg_ayah_time") or u"إيقاف"), self.bot_ayah_time),
               (u"إرسال رسالة تجربة", lambda: (BG.tg_notify(u"✅ تجربة من Saad Quran Hub"),
                                               self.qh_status_text(u"أُرسلت" if owners else u"لا يوجد حساب مربوط بعد"))),
-              (u"التوكن: %s (اضغط للتغيير)" % tgbot.mask(BG.bot_token()), self.bot_token_edit)]
+              (u"ورد الحفظ على الجوال: %s" % (cfg.get("tg_wird_time") or u"إيقاف"), self.bot_wird_time),
+              (u"نسخة احتياطية أسبوعية على تليجرام: %s" % self._on(cfg.get("tg_backup", True)),
+               lambda: BG.toggle_flag("tg_backup", True, u"النسخة الاحتياطية الأسبوعية")),
+              (u"إرسال نسخة احتياطية الآن", lambda: [BG.tg_backup(o["id"]) for o in owners] if BG.bot else None)]
+        if private_edition():
+            it.append((u"تقارير الأعطال إليك: %s" % self._on(cfg.get("tg_errors", True)),
+                       lambda: BG.toggle_flag("tg_errors", True, u"تقارير الأعطال")))
+        it.append((u"التوكن: %s (اضغط للتغيير)" % tgbot.mask(BG.bot_token()), self.bot_token_edit))
         self._menu(u"بوت تليجرام", it)
+
+    def bot_wird_time(self):
+        opts = [(u"إيقاف", None)] + [(u"%02d:00" % h, u"%02d:00" % h) for h in (5, 6, 7, 8, 9, 10, 14, 17, 20, 21, 22)]
+
+        def setit(c=None):
+            if c:
+                BG.cfg["tg_wird_time"] = c[1]
+                BG.save()
+                self.qh_status_text(u"ورد الحفظ على الجوال: %s" % (c[1] or u"إيقاف"))
+        self._choice(u"وقت إرسال ورد الحفظ", opts, setit)
 
     def bot_toggle(self):
         BG.cfg["tg_bot"] = not BG.cfg.get("tg_bot", True)
@@ -8332,6 +8769,9 @@ class QuranHub(Screen):
         it.append((u"رابط التحديث: %s" % (url or u"غير محدد"), self.set_update_url))
         if url:
             it.append((u"تنزيل التحديث من الرابط وتثبيته", self.update_from_url))
+        if not private_edition():
+            it.append((u"إضافة مصدر التحديث الرسمي (feed) إلى الجهاز", BG.feed_add))
+        it.append((u"ما الجديد في هذا الإصدار", self.show_whats_new))
         it.append((u"الإصدار الحالي: %s" % PLUGIN_VERSION, lambda: None))
         self._menu(u"تحديث البلاجين", it0 + it)
 
@@ -9405,6 +9845,129 @@ def studio_more_full(session):
     studio_menu(session)
 
 
+class QHSimple(Screen):
+    """Simple mode (elderly): six big buttons, big letters, high contrast.  MENU opens the full plugin."""
+    TILES = [("fav", u"▶  قارئي المفضل"), ("radio", u"📻  الإذاعة"), ("resume", u"⏯  تابع الاستماع"),
+             ("mushaf", u"📖  المصحف"), ("adhkar", u"📿  الأذكار"), ("stop", u"⏹  إيقاف")]
+    BG_, FG, SEL, TILE = "#000000", "#ffffff", "#f4c542", "#1c2733"
+
+    def __init__(self, session):
+        BG.attach(session)
+        o = [u'<screen name="QuranHubSimple" position="0,0" size="%d,%d" flags="wfNoBorder" backgroundColor="%s">' % (
+            p(1280), p(720), self.BG_)]
+        o.append(u'<widget name="sm_title" position="%d,%d" size="%d,%d" font="Regular;%d" halign="center" valign="center" '
+                 u'foregroundColor="%s" backgroundColor="%s" transparent="1" />' % (p(20), p(10), p(1240), p(70), p(44), self.SEL, self.BG_))
+        for i in range(6):
+            x = p(40 + (1 - i % 2) * 610)          # right-to-left: the first tile on the right
+            y = p(100 + (i // 2) * 170)
+            o.append(u'<widget name="sm_t%d" position="%d,%d" size="%d,%d" font="Regular;%d" halign="center" valign="center" '
+                     u'foregroundColor="%s" backgroundColor="%s" />' % (i, x, y, p(590), p(150), p(52), self.FG, self.TILE))
+        o.append(u'<widget name="sm_now" position="%d,%d" size="%d,%d" font="Regular;%d" halign="center" valign="center" '
+                 u'foregroundColor="%s" backgroundColor="%s" transparent="1" />' % (p(20), p(612), p(1240), p(50), p(32), self.FG, self.BG_))
+        o.append(u'<widget name="sm_hint" position="%d,%d" size="%d,%d" font="Regular;%d" halign="center" valign="center" '
+                 u'foregroundColor="#9aa5b1" backgroundColor="%s" transparent="1" />' % (p(20), p(668), p(1240), p(40), p(24), self.BG_))
+        o.append(u'</screen>')
+        self.skin = u"".join(o)
+        Screen.__init__(self, session)
+        self.skinName = "QuranHubSimple"
+        self["sm_title"] = Label(u"القرآن الكريم")
+        for i, (_k, lab) in enumerate(self.TILES):
+            self["sm_t%d" % i] = Label(i18n.T(lab))
+        self["sm_now"] = Label(u"")
+        self["sm_hint"] = Label(i18n.T(u"الأسهم للاختيار • OK للتشغيل • MENU القائمة الكاملة • EXIT خروج"))
+        self.sm_i = 0
+        self["actions"] = ActionMap(["OkCancelActions", "DirectionActions", "InfobarMenuActions"],
+                                    {"cancel": self.close, "ok": self.press, "mainMenu": self.full,
+                                     "left": lambda: self.move(1), "right": lambda: self.move(-1),
+                                     "up": lambda: self.move(-2), "down": lambda: self.move(2)}, -1)
+        self.sm_timer, self._c = make_timer(self.refresh)
+        self.onLayoutFinish.append(self.start)
+        self.onClose.append(lambda: self.sm_timer.stop())
+
+    def start(self):
+        self.paint()
+        self.refresh()
+        self.sm_timer.start(2000, False)
+
+    def paint(self):
+        if parseColor is None:
+            return
+        for i in range(6):
+            try:
+                w = self["sm_t%d" % i].instance
+                sel = i == self.sm_i
+                w.setBackgroundColor(parseColor(self.SEL if sel else self.TILE))
+                w.setForegroundColor(parseColor("#000000" if sel else self.FG))
+            except Exception:
+                pass
+
+    def move(self, d):
+        self.sm_i = (self.sm_i + d) % 6
+        self.paint()
+
+    def refresh(self):
+        self["sm_now"].setText((u"▶ " + (Player.cur_title or u"")) if Player.active else u"")
+
+    def full(self):
+        open_hub(self.session)
+
+    def _choice(self, title, opts, cb):
+        try:
+            from Screens.ChoiceBox import ChoiceBox
+            self.session.openWithCallback(cb, ChoiceBox, title=title, list=opts)
+        except Exception as e:
+            qlog("simple: %s" % e)
+
+    def press(self):
+        k = self.TILES[self.sm_i][0]
+        if k == "stop":
+            return BG.stop_play()
+        if k == "resume":
+            return BG.resume_last()
+        if k == "mushaf":
+            return self.session.open(QHMushaf, BG.cfg.get("mushaf_page", 1))
+        if k == "adhkar":
+            return studio_adhkar_menu(self.session)
+        if k == "radio":
+            return self.pick_radio()
+        self.pick_fav()
+
+    def pick_radio(self):
+        favs = [tuple(f) for f in BG.cfg.get("fav", []) if f and f[0] in ("mp3q_radios", "sq_radios")]
+
+        def go(rows):
+            if isinstance(rows, Exception) or not rows:
+                return BG.set_status(u"تعذّر تحميل الإذاعات", notify=True)
+            self._choice(u"اختر الإذاعة", [(l, x) for l, x in rows if x], lambda c: c and BG.play_list([c[1]], 0))
+        Runner().run(fav_loader(favs) if favs else section_loader("mp3q_radios"), go, go)
+
+    def pick_fav(self):
+        favs = [tuple(f) for f in BG.cfg.get("fav", [])]
+        if not favs:
+            return BG.resume_last()
+
+        def go(rows):
+            if isinstance(rows, Exception) or not rows:
+                return BG.resume_last()
+            self._choice(u"قارئي المفضل", [(l, x) for l, x in rows if x], self.fav_chosen)
+        Runner().run(fav_loader(favs), go, go)
+
+    def fav_chosen(self, c=None):
+        if not c:
+            return
+        entry = c[1]
+        if not entry_has_subs(entry):
+            return BG.play_list([entry], 0)
+
+        def go(rows):
+            pls = [(l, x) for l, x in (rows if not isinstance(rows, Exception) else []) if x and (x.get("url") or x.get("resolve"))]
+            if not pls:
+                return BG.set_status(u"تعذّر تحميل السور", notify=True)
+            self._choice(u"اختر السورة", [(l, i) for i, (l, _x) in enumerate(pls)],
+                         lambda k: k and BG.play_list([x for _l, x in pls], k[1]))
+        Runner().run(lambda: subs_for(entry), go, go)
+
+
 def open_hub(session):
     def again(result=None):
         if result == "retheme":
@@ -9415,6 +9978,8 @@ def open_hub(session):
 def open_start(session):
     """Home screen (default) or the classic three-column library."""
     BG.attach(session)
+    if BG.cfg.get("simple_mode", False):
+        return session.open(QHSimple)
     if not BG.cfg.get("home_screen", False):
         return open_hub(session)
 

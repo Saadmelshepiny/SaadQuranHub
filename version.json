@@ -1,5 +1,5 @@
 {
-  "version": "1.0.4",
-  "ipk": "https://raw.githubusercontent.com/Saadmelshepiny/SaadQuranHub/main/ipk/enigma2-plugin-extensions-saadquranhub_1.0.4_all.ipk",
-  "notes": "إصلاح مفتاح ألوان التجويد • مكتبة الـHDD مع صورة القناة • تحديث تلقائي من GitHub"
+  "version": "1.1",
+  "ipk": "https://raw.githubusercontent.com/Saadmelshepiny/SaadQuranHub/main/ipk/enigma2-plugin-extensions-saadquranhub_1.1_all.ipk",
+  "notes": "وضع رمضان والمناسبات الهجرية • إذاعتي الخاصة • ورد الحفظ والنسخ الاحتياطي عبر تليجرام • مؤقت نوم بخفض تدريجي • الوضع المبسّط • English UI • مصدر opkg"
 }

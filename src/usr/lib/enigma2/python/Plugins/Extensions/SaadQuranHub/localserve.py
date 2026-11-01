@@ -227,3 +227,82 @@ def path_of(url):
                 pass
         return p
     return url
+
+
+# ------------------------------------------------------------------ "my station" for the home (1.8)
+class HomeRadio(object):
+    """http://<receiver>:8087/radio/<pin>.mp3 - the MP3 files of the library one after another, without
+    end, for any phone / speaker / PC in the home.  Only on the home network (a PIN in the address)."""
+    PORT = 8087
+
+    def __init__(self, files, pin, shuffle=True):
+        self.files, self.pin, self.shuffle = files, str(pin), shuffle
+        outer = self
+
+        class H(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.0"
+
+            def log_message(self, *a):
+                pass
+
+            def do_GET(self):
+                if urlparse(self.path).path != "/radio/%s.mp3" % outer.pin:
+                    self.send_response(404)
+                    self.end_headers()
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", "audio/mpeg")
+                self.send_header("Cache-Control", "no-cache")
+                self.send_header("icy-name", "Saad Quran Hub")
+                self.end_headers()
+                outer.stream(self.wfile)
+        self.server = _Server(("0.0.0.0", self.PORT), H)
+        th = threading.Thread(target=self.server.serve_forever)
+        th.daemon = True
+        th.start()
+
+    def playlist(self):
+        import random
+        fs = [f for f in (self.files() or []) if f.lower().endswith(".mp3") and os.path.isfile(f)]
+        if self.shuffle:
+            random.shuffle(fs)
+        return fs
+
+    def stream(self, out):
+        empty = 0
+        while empty < 3:
+            fs = self.playlist()
+            if not fs:
+                empty += 1
+                continue
+            for f in fs:
+                try:
+                    _pre, off = layout(f)
+                    size = os.path.getsize(f)
+                    end = size
+                    with open(f, "rb") as fh:
+                        if size > 128:
+                            fh.seek(size - 128)
+                            if fh.read(3) == b"TAG":
+                                end = size - 128            # ID3v1 at the end
+                        fh.seek(off)
+                        left = end - off
+                        while left > 0:
+                            c = fh.read(min(32768, left))
+                            if not c:
+                                break
+                            out.write(c)
+                            left -= len(c)
+                except (IOError, OSError) as e:
+                    if getattr(e, "errno", None) in (32, 104):     # the listener went away
+                        return
+                    continue
+                except Exception:
+                    return
+
+    def close(self):
+        try:
+            self.server.shutdown()
+            self.server.server_close()
+        except Exception:
+            pass

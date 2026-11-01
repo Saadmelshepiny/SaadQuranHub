@@ -787,3 +787,75 @@ def surah_info(n):
     if texts:
         out += [u"", u"أولها: " + u" ".join(texts[0].split()[:8])]
     return out
+
+
+# ------------------------------------------------------------------ Ramadan + hijri occasions (1.8)
+def hijri_adjust(cfg):
+    try:
+        return max(-2, min(2, int(cfg.get("hijri_adj", 0))))      # the same setting as the reminders menu
+    except Exception:
+        return 0
+
+
+def ramadan_today(cfg, ts=None):
+    """Day of Ramadan (1..30) or 0, with the user's hijri correction."""
+    _y, m, d = hijri(ts, hijri_adjust(cfg))
+    return d if m == 9 else 0
+
+
+def juz_bounds(j):
+    """(first (surah, ayah), last (surah, ayah)) of juz j."""
+    j = max(1, min(30, int(j)))
+    start = extras.JUZ_START[j - 1]
+    if j < 30:
+        n2, a2 = extras.JUZ_START[j]
+        if a2 > 1:
+            end = (n2, a2 - 1)
+        else:
+            end = (n2 - 1, ayah_counts()[n2 - 2])
+    else:
+        end = (114, ayah_counts()[113])
+    return start, end
+
+
+def juz_items(j, rec=0, src="everyayah"):
+    """Every ayah of juz j as a play list (the Ramadan night khatma)."""
+    (n1, a1), (n2, a2) = juz_bounds(j)
+    label = HIFZ_RECITERS[rec][0]
+    items = []
+    for n in range(n1, n2 + 1):
+        first = a1 if n == n1 else 1
+        last = a2 if n == n2 else ayah_counts()[n - 1]
+        for a in range(first, last + 1):
+            items.append({"title": u"%s - الجزء %d - سورة %s آية %d" % (label, j, data.surah_name(n), a),
+                          "url": ayah_url(n, a, rec, src), "autonext": True, "nohist": True, "ayah": [n, a]})
+    if items:
+        items[-1]["stop_at_end"] = True
+    return items
+
+
+OCCASIONS = {(1, 1): u"رأس السنة الهجرية", (1, 9): u"يوم تاسوعاء", (1, 10): u"يوم عاشوراء",
+             (9, 1): u"أول أيام شهر رمضان", (9, 21): u"بداية العشر الأواخر من رمضان",
+             (10, 1): u"عيد الفطر المبارك", (12, 1): u"بداية العشر الأوائل من ذي الحجة",
+             (12, 9): u"يوم عرفة", (12, 10): u"عيد الأضحى المبارك"}
+
+
+def occasion_for(ts=None, adjust=0):
+    """Occasion of the hijri day containing ts, or None (the white days except in Dhul-Hijjah)."""
+    _y, m, d = hijri(ts, adjust)
+    if (m, d) in OCCASIONS:
+        return OCCASIONS[(m, d)]
+    if d == 13 and m != 12:
+        return u"بداية الأيام البيض (13 و14 و15 من %s)" % HIJRI_MONTHS[m - 1]
+    return None
+
+
+def wird_passage(cfg, ts=None):
+    """The passage to send to the phone today: (surah, a1, a2, why) - due review first, else the
+    memorisation range of the studio."""
+    due = srs_due(cfg, ts)
+    if due:
+        _k, n, a1, a2, _it = due[0]
+        return n, a1, a2, u"مراجعة اليوم"
+    st = hifz_state(cfg)
+    return st["n"], st["a1"], st["a2"], u"ورد الحفظ"
