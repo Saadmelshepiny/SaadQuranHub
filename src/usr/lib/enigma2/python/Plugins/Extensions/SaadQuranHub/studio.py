@@ -156,6 +156,8 @@ def khatma_mark(cfg, pages=None, ts=None):
     k = khatma_state(cfg)
     today = time.strftime("%Y-%m-%d", time.localtime(ts))
     add = int(pages) if pages is not None else khatma_daily(k)
+    if pages is None:
+        star_add(cfg, u"الورد اليومي")
     if k["today"] != today:
         k["today"], k["today_pages"] = today, 0
     k["today_pages"] += add
@@ -420,6 +422,8 @@ def quiz_record(cfg, n, a1, a2, right, total, ts=None):
     q = cfg.setdefault("quiz", {})
     key = "%d:%d-%d" % (n, a1, a2)
     pct = int(round(100.0 * right / max(1, total)))
+    if pct >= 70:
+        star_add(cfg, u"اختبار حفظ %d%%" % pct)
     old = q.get(key, {})
     q[key] = {"best": max(pct, old.get("best", 0)), "last": pct, "times": old.get("times", 0) + 1,
               "ts": int(ts or time.time())}
@@ -692,7 +696,9 @@ def srs_text(cfg, ts=None):
 
 
 # ------------------------------------------------------------------ family profiles
-PROFILE_KEYS = ("khatma", "quiz", "srs", "stats", "hifz", "reader_pos")
+PROFILE_KEYS = ("khatma", "quiz", "srs", "stats", "hifz", "reader_pos",
+                # 2.0: each person also has own favourites, lists, history, places and stars
+                "fav", "pls", "hist", "plays", "spos", "resume", "marks", "mushaf_page", "stars")
 
 
 def profiles(cfg):
@@ -859,3 +865,68 @@ def wird_passage(cfg, ts=None):
         return n, a1, a2, u"مراجعة اليوم"
     st = hifz_state(cfg)
     return st["n"], st["a1"], st["a2"], u"ورد الحفظ"
+
+
+# ------------------------------------------------------------------ 2.0: stars (children) and the harvest
+def star_add(cfg, why=u"", n=1, ts=None):
+    st = cfg.setdefault("stars", {"n": 0, "log": []})
+    st["n"] = int(st.get("n", 0)) + n
+    st.setdefault("log", []).insert(0, [int(ts or time.time()), why])
+    del st["log"][30:]
+    return st["n"]
+
+
+def stars_of(cfg):
+    """-> [(profile, stars)] of every person."""
+    cur = cfg.get("profile") or profiles(cfg)[0]
+    out = []
+    for p_ in profiles(cfg):
+        st = cfg.get("stars") if p_ == cur else ((cfg.get("pdata") or {}).get(p_) or {}).get("stars")
+        out.append((p_, int((st or {}).get("n", 0))))
+    return out
+
+
+def stars_text(cfg):
+    st = cfg.get("stars") or {}
+    n = int(st.get("n", 0))
+    lines = [u"⭐ " * min(n, 10) + (u"(%d)" % n if n > 10 else u""), u"عدد النجوم: %d" % n, u""]
+    for t, why in (st.get("log") or [])[:8]:
+        lines.append(u"• %s  %s" % (time.strftime("%m-%d", time.localtime(t)), why))
+    if not st.get("log"):
+        lines.append(u"النجوم تأتي من: إتمام سورة في وضع الأطفال، والورد اليومي، واختبار الحفظ بنتيجة 70% فأكثر")
+    return u"\n".join(lines)
+
+
+def harvest(cfg, period="month", ts=None):
+    """-> dict of the listening of this month / this year (from the daily statistics)."""
+    now = ts or time.time()
+    lt = time.localtime(now)
+    pre = time.strftime("%Y-%m" if period == "month" else "%Y", lt)
+    st = cfg.get("stats") or {}
+    days = dict((d, s) for d, s in (st.get("days") or {}).items() if d.startswith(pre))
+    q = cfg.get("quiz") or {}
+    t0 = time.mktime((lt.tm_year, lt.tm_mon if period == "month" else 1, 1, 0, 0, 0, 0, 0, -1))
+    quizzes = [v for v in q.values() if v.get("ts", 0) >= t0]
+    k = cfg.get("khatma") or {}
+    stars = [x for x in ((cfg.get("stars") or {}).get("log") or []) if x[0] >= t0]
+    return {"pre": pre, "secs": sum(days.values()), "days": len([1 for s in days.values() if s >= 60]),
+            "best": max(days.items(), key=lambda kv: kv[1]) if days else None,
+            "quizzes": len(quizzes), "quiz_avg": int(sum(v.get("last", 0) for v in quizzes) / len(quizzes)) if quizzes else 0,
+            "khatmas": int(k.get("count", 0)), "khatma_pct": int(k.get("pages", 0) * 100 / float(PAGES)) if k else 0,
+            "stars": len(stars), "top": sorted((st.get("rec") or {}).items(), key=lambda kv: -kv[1])[:3]}
+
+
+def harvest_text(cfg, period="month", ts=None):
+    h = harvest(cfg, period, ts)
+    title = u"حصاد الشهر %s" % h["pre"] if period == "month" else u"حصاد السنة %s" % h["pre"]
+    lines = [u"🌾 " + title, u"",
+             u"وقت الاستماع: %s" % _hm(h["secs"]),
+             u"أيام الاستماع (دقيقة فأكثر): %d" % h["days"]]
+    if h["best"]:
+        lines.append(u"أفضل يوم: %s (%s)" % (h["best"][0], _hm(h["best"][1])))
+    lines += [u"الختمة الحالية: %d%%  •  الختمات المكتملة: %d" % (h["khatma_pct"], h["khatmas"]),
+              u"اختبارات الحفظ: %d%s" % (h["quizzes"], (u"  •  المتوسط %d%%" % h["quiz_avg"]) if h["quizzes"] else u""),
+              u"النجوم: %d" % h["stars"]]
+    if h["top"]:
+        lines += [u"", u"أكثر القراء استماعاً (الإجمالي):"] + [u"%d. %s" % (i, n) for i, (n, _s) in enumerate(h["top"], 1)]
+    return u"\n".join(lines)

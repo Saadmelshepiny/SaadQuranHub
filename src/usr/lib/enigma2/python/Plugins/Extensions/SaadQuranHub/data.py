@@ -165,11 +165,24 @@ def _cache_path(name):
     return os.path.join(CACHE_DIR, name)
 
 
+REFRESH = threading.local()            # REFRESH.on = True in the nightly refresh thread only
+FOREVER = ("timing_", "qcom_seg_")      # ayah / word timings never change: kept for good
+
+
+def _ttl(name):
+    if getattr(REFRESH, "on", False):
+        return 0
+    if name.startswith(FOREVER):
+        return 10 ** 10
+    return CACHE_TTL
+
+
 def cached_json(url, name):
-    """`url` may be one URL or a list of mirrors that are tried in order."""
+    """`url` may be one URL or a list of mirrors that are tried in order.  The copy on the disk is
+    used when it is fresh, and also when the internet is down (stale beats nothing)."""
     urls = list(url) if isinstance(url, (list, tuple)) else [url]
     path = _cache_path(name)
-    fresh = os.path.exists(path) and (time.time() - os.path.getmtime(path) < CACHE_TTL)
+    fresh = os.path.exists(path) and (time.time() - os.path.getmtime(path) < _ttl(name))
     if fresh:
         try:
             with open(path, "rb") as f:
@@ -200,13 +213,19 @@ def cached_json(url, name):
 
 def cached_text(url, name):
     path = _cache_path(name)
-    if os.path.exists(path) and (time.time() - os.path.getmtime(path) < CACHE_TTL):
+    if os.path.exists(path) and (time.time() - os.path.getmtime(path) < _ttl(name)):
         try:
             with open(path, "rb") as f:
                 return f.read().decode("utf-8", "ignore")
         except Exception:
             pass
-    text = http_text(url, 20)
+    try:
+        text = http_text(url, 20)
+    except Exception:
+        if os.path.exists(path):              # no internet: the copy on the disk
+            with open(path, "rb") as f:
+                return f.read().decode("utf-8", "ignore")
+        raise
     try:
         if not os.path.isdir(CACHE_DIR):
             os.makedirs(CACHE_DIR)

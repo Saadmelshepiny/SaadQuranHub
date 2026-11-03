@@ -1192,7 +1192,15 @@ def pl_add(cfg, name, item):
     return True
 
 
+URL_FIX = [None]          # 2.0: kept copies on the disk -> their internet address
+
+
 def history_add(cfg, title, url, live=False, ts=None):
+    if URL_FIX[0] is not None:
+        try:
+            url = URL_FIX[0](url)
+        except Exception:
+            pass
     hist = cfg.setdefault("hist", [])
     if hist and hist[0].get("url") == url:
         return

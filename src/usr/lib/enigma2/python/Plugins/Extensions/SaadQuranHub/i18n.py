@@ -9,6 +9,26 @@ import re
 LANG = ["ar"]
 
 EN = {
+    u"القرص والسرعة والثبات": u"Disk, speed & stability",
+    u"الملف الشخصي": u"Profile",
+    u"حصاد الشهر": u"Monthly harvest",
+    u"حصاد السنة": u"Yearly harvest",
+    u"النجوم": u"Stars",
+    u"مكتبتي لأجهزة البيت (DLNA)": u"My library for home devices (DLNA)",
+    u"مكتبتي لأجهزة البيت": u"My library for home devices",
+    u"الرجوع لإصدار سابق": u"Roll back to a previous version",
+    u"متاح بدون إنترنت (ما سمعته)": u"Available offline (played before)",
+    u"حفظ ما أسمعه على القرص (يعمل بدون إنترنت)": u"Keep what I play on the disk (works offline)",
+    u"مسح ما سمعته سابقاً من القرص": u"Clear kept audio from the disk",
+    u"إيقاظ القرص قبل الأذان والمواعيد": u"Wake the disk before adhan and schedules",
+    u"متابعة التلاوة تلقائياً بعد انقطاع الكهرباء": u"Resume after a power cut",
+    u"تنظيف الملفات المؤقتة القديمة الآن": u"Clean old temporary files now",
+    u"النسخ اليومية للإعدادات (آخر 7 أيام + 4 أسابيع)": u"Daily settings copies (7 days + 4 weeks)",
+    u"النسخ اليومية للإعدادات": u"Daily settings copies",
+    u"حفظ نسخة الآن": u"Save a copy now",
+    u"إضافة «إذاعتي الخاصة» كقناة في قائمة الراديو": u"Add 'My station' as a radio channel",
+    u"إزالة «إذاعتي الخاصة» من قائمة الراديو": u"Remove 'My station' from the radio list",
+    u"رسم المصحف كاملاً مسبقاً (أثناء الانتظار أو ليلاً)": u"Pre-draw the whole mushaf (standby / night)",
     u"قارئ اليوم": u"Reciter of the day",
     # sources / groups / headers
     u"المفضلة": u"Favourites", u"القراء والمصاحف": u"Reciters", u"الإذاعات المباشرة": u"Live radios",

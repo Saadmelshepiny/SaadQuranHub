@@ -58,8 +58,11 @@ from . import library
 from . import tgbot
 from . import localserve
 from . import i18n
+from . import hddcache
+from . import dlna
+from . import safeupdate
 
-PLUGIN_VERSION = "1.2"
+PLUGIN_VERSION = "1.3"
 GITHUB_REPO = "Saadmelshepiny/SaadQuranHub"
 GITHUB_INFO = "https://raw.githubusercontent.com/%s/main/version.json" % GITHUB_REPO
 
@@ -102,6 +105,7 @@ SECTIONS = [
     ("assabile", u"قراء موقع السبيل", u"القراء", True),
     ("ourq", u"شيوخ موقع قرآننا", u"الشيوخ", True),
     ("sync", u"تلاوات بتزامن الآيات", u"القراء", True),
+    ("acache", u"متاح بدون إنترنت (ما سمعته)", u"الملفات", False),
 ]
 # the right column, organised in titled groups (CH+ / CH- jump from group to group)
 GROUPS = [
@@ -110,13 +114,13 @@ GROUPS = [
                           "islam", "ourq")),
     (u"الإذاعات المباشرة", ("mp3q_radios", "sq_radios")),
     (u"تلاوات نادرة وتليجرام", ("way_iconic", "@tg")),
-    (u"مكتبات القرص", ("@dsk",)),
+    (u"مكتبات القرص", ("@acache", "@dsk")),
 ]
 # icon (icons/<size>/<name>.png) shown next to every source; Telegram channels use their own picture
 SECTION_ICON = {"fav": "fav", "mp3q_reciters": "library", "mp3q_radios": "radio", "qcom": "hq",
                 "sq_reciters": "mushaf", "sq_radios": "radio", "islam": "islamweb", "way_reciters": "riwayat",
                 "way_iconic": "gem", "pls": "lists", "hist": "history", "most": "most", "local": "disk",
-                "srch": "search", "qpedia": "pedia", "tvq": "tv", "assabile": "waves", "ourq": "mic2", "sync": "sync"}
+                "srch": "search", "acache": "disk", "qpedia": "pedia", "tvq": "tv", "assabile": "waves", "ourq": "mic2", "sync": "sync"}
 ICON_PX = 54 if getDesktop(0).size().width() > 1500 else 36
 ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", str(ICON_PX))
 _ICON_CACHE = {}
@@ -241,6 +245,18 @@ def qlog(msg):
         pass
     try:
         note_error(u"%s" % (msg,))
+    except Exception:
+        pass
+    try:                                         # 2.0: inside an except block -> the full traceback
+        import sys as _sys
+        if _sys.exc_info()[0] is not None and data.home_dir():
+            import traceback
+            ep = os.path.join(data.home_dir("logs"), "errors.log")
+            if os.path.exists(ep) and os.path.getsize(ep) > 300000:
+                os.rename(ep, ep + ".1")
+            with open(ep, "ab") as f:
+                f.write((u"==== %s %s (%s)\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), msg, PLUGIN_VERSION)).encode("utf-8"))
+                f.write(traceback.format_exc().encode("utf-8", "ignore"))
     except Exception:
         pass
 
@@ -848,6 +864,9 @@ def section_loader(key):
                         for n, pth in extras.local_files()]
     if key == "srch":
         return lambda: list(BG.search_rows)
+    if key == "acache":
+        return lambda: [(t, {"title": t, "url": u, "path": localserve.path_of(u), "autonext": True,
+                             "sub": data.fmt_bytes(sz)}) for t, u, sz in AUDIO.entries()]
     if key == "sync":
         return lambda: [(u"%s - %s" % (r["name"], r["rewaya"]), {"syn": r}) for r in data.timing_reads()]
     if key == "qpedia":
@@ -1044,7 +1063,8 @@ class Hub16Bg(object):
                 if manual:
                     self.set_status(u"تعذّر الوصول إلى GitHub: %s" % res, notify=True)
                 return
-            self.cfg["gh_latest"] = {"version": res["version"], "ipk": res.get("ipk", u""), "notes": res.get("notes", u"")}
+            self.cfg["gh_latest"] = {"version": res["version"], "ipk": res.get("ipk", u""), "notes": res.get("notes", u""),
+                                     "sha256": res.get("sha256", u"")}
             self.save()
             if vtuple(res["version"]) > vtuple(PLUGIN_VERSION):
                 msg = u"⬆ يتوفر إصدار جديد من Saad Quran Hub: %s\nللتثبيت: MENU > أدوات وتشخيص > تحديث البلاجين" % res["version"]
@@ -1255,6 +1275,10 @@ class Hub16Bg(object):
             self.tick18()
         except Exception as e:
             qlog("tick18: %r" % (e,))
+        try:
+            self.tick19()
+        except Exception as e:
+            qlog("tick19: %r" % (e,))
         if self.bot is None:
             return
         for u in self.bot.poll():
@@ -1325,7 +1349,8 @@ class Hub16Bg(object):
             u"• اكتب اسم قارئ للبحث في كل المواقع، ثم اختر السورة لتعمل على التلفزيون.\n"
             u"• /now التشغيل الآن وأزرار التحكم\n• /radio الإذاعات\n• /lib مكتبتي (تشغيل أو إرسال الملفات)\n"
             u"• /dl حالة التنزيلات\n• /ayah آية اليوم\n• /marks علاماتي\n• /speed سرعة التلاوة\n• /stop إيقاف\n"
-            u"• /wird ورد الحفظ الآن\n• /backup نسخة احتياطية (أرسل الملف لاحقاً للاستعادة)\n• /station رابط إذاعتي الخاصة")
+            u"• /wird ورد الحفظ الآن\n• /backup نسخة احتياطية (أرسل الملف لاحقاً للاستعادة)\n• /station رابط إذاعتي الخاصة\n"
+            u"• /stars نجوم الأسرة\n• /harvest حصاد الشهر")
 
     def tg_handle(self, u):
         if "callback_query" in u:
@@ -1375,6 +1400,10 @@ class Hub16Bg(object):
             self.tg_wird(chat)
         elif cmd == u"/backup":
             self.tg_backup(chat)
+        elif cmd == u"/stars":
+            b.send(chat, u"⭐ النجوم\n" + u"\n".join(u"• %s: %d" % x for x in studio.stars_of(self.cfg)))
+        elif cmd == u"/harvest":
+            b.send(chat, studio.harvest_text(self.cfg, "month"))
         elif cmd == u"/station":
             url = self.station_url()
             b.send(chat, (u"📻 إذاعتي الخاصة (من شبكة البيت فقط):\n%s" % url) if url else u"تعذّر تشغيل الإذاعة")
@@ -1911,8 +1940,15 @@ class Hub17Bg(object):
 
 
 
-BUILD = 19             # one number for both editions (the "what's new" screen and the changelog)
+BUILD = 20             # one number for both editions (the "what's new" screen and the changelog)
 CHANGELOG = [
+    (20, [u"تحديث آمن: فحص الحزمة قبل التثبيت، والرجوع للإصدار السابق تلقائياً إذا لم يعمل الجديد",
+          u"مكان التلاوة يُحفظ كل 10 ثوانٍ، والمتابعة بعد انقطاع الكهرباء (اختياري)",
+          u"ما تسمعه يُحفظ على القرص ويعمل بدون إنترنت، والسورة التالية تُجهّز أثناء الاستماع",
+          u"رسم المصحف كاملاً مسبقاً، وتحديث القوائم ليلاً، والقرص يستيقظ قبل الأذان والمواعيد",
+          u"نسخة يومية للإعدادات (7 أيام + 4 أسابيع)، وتنبيه قبل امتلاء القرص",
+          u"«إذاعتي الخاصة» كقناة في قائمة الراديو، ومكتبتك لتلفزيونات وجوالات البيت (DLNA)",
+          u"ملف شخصي كامل لكل فرد، ونجوم للأطفال، وحصاد الشهر والسنة"]),
     (19, [u"كل ملفات البلاجين على الـHDD: الذاكرة المؤقتة، الحروف المرسومة، السجل، الملفات المؤقتة",
           u"نسخة من الإعدادات على الـHDD تُحفظ مع كل تغيير، وترجع وحدها بعد تثبيت صورة جديدة",
           u"ذاكرة الجهاز (RAM) أخف، والمصحف أسرع بعد إعادة التشغيل لأن الأسطر المرسومة محفوظة"]),
@@ -2213,8 +2249,494 @@ class Hub18Bg(object):
             self.set_status(u"تعذّرت إضافة المصدر: %s" % e, notify=True)
             return False
 
+AUDIO = hddcache.AudioCache()
 
-class Background(Hub16Bg, Hub17Bg, Hub18Bg):
+
+def _write_small(path, obj):
+    """Tiny state files: write + rename (no fsync, so a sleeping disk never blocks the screen)."""
+    try:
+        tmp = path + ".new"
+        with open(tmp, "wb") as f:
+            f.write(json.dumps(obj, ensure_ascii=False).encode("utf-8"))
+        os.rename(tmp, path)
+        return True
+    except Exception:
+        return False
+
+
+def _bg_thread(fn, *a):
+    t = threading.Thread(target=fn, args=a)
+    t.daemon = True
+    t.start()
+    return t
+
+
+class Hub19Bg(object):
+    """2.0: stability (position journal, resume after power cuts, HDD wake-up, disk watch, rotating
+    backups), speed (kept audio, next track fetched ahead, pre-drawn mushaf, nightly list refresh),
+    the station as a channel, DLNA, stars and the harvest."""
+    t19 = 0
+    j19 = 0
+    jplaying = False
+    wake_min = None
+    dlna = None
+    mpre = None
+    kids_run = None
+    boot_checked = False
+
+    def init19(self):
+        try:
+            AUDIO.enabled = self.cfg.get("audio_cache", True)
+            AUDIO.quota = int(float(self.cfg.get("audio_quota", 20)) * 1024 ** 3)
+        except Exception:
+            pass
+        st = self.state_load()
+        if st and st.get("url") and st.get("ts", 0) > self.cfg.get("resume_ts", 0):
+            self.cfg["resume"] = dict((k, st[k]) for k in ("title", "url", "pos", "ctx") if k in st)
+            self.cfg["resume_ts"] = st["ts"]
+
+    # -- the URL that is really played: a kept copy when there is one ------------------------------
+    def cache_swap(self, url, title=u"", live=False):
+        try:
+            if live or not AUDIO.cacheable(url):
+                return url
+            loc = AUDIO.local_for(url)
+            if loc:
+                return loc
+            if self.cfg.get("audio_cache", True):
+                AUDIO.want(url, title)
+        except Exception as e:
+            qlog("audio cache: %r" % (e,))
+        return url
+
+    def real_url(self, url):
+        try:
+            return AUDIO.remote_for(url)
+        except Exception:
+            return url
+
+    def cache_next(self):
+        """Fetch the next track of the list while this one plays."""
+        try:
+            if not self.cfg.get("audio_cache", True) or not self.pl or len(self.pl) < 2:
+                return
+            nxt = self.pl[(self.pi + 1) % len(self.pl)]
+            u = nxt.get("url") or (nxt.get("_pre") or (None,))[0]
+            if u and not nxt.get("live"):
+                AUDIO.want(u, nxt.get("title", u""))
+        except Exception as e:
+            qlog("cache next: %r" % (e,))
+
+    # -- 10-second journal of what plays (survives power cuts) ---------------------------------------
+    def state_path(self):
+        d = data.home_dir("system")
+        return os.path.join(d, "state.json") if d else None
+
+    def state_load(self):
+        p = self.state_path()
+        try:
+            with open(p, "rb") as f:
+                return json.loads(f.read().decode("utf-8"))
+        except Exception:
+            return None
+
+    def journal_tick(self, now):
+        p = self.state_path()
+        if not p:
+            return
+        playing = bool(Player.active and self.cur_url and not self.cur_live and self.adhan_prev is None)
+        if playing and now - self.j19 >= 10:
+            self.j19 = now
+            pp = self.play_pos()
+            st = {"title": Player.cur_title, "url": self.real_url(self.cur_url), "pos": int(pp[0]) if pp else 0,
+                  "ctx": self.ctx or {}, "playing": True, "ts": int(now)}
+            _write_small(p, st)
+            self.jplaying = True
+        elif not Player.active and self.jplaying:
+            self.jplaying = False
+            st = self.state_load() or {}
+            st.update({"playing": False, "ts": int(now)})
+            _write_small(p, st)
+
+    def boot_resume(self):
+        """After a power cut / restart: continue what was playing (only when switched on)."""
+        st = self.state_load()
+        if not st or not st.get("playing") or time.time() - st.get("ts", 0) > 12 * 3600 or Player.active:
+            return
+        self.cfg["resume"] = dict((k, st[k]) for k in ("title", "url", "pos", "ctx") if k in st)
+        self.save()
+        popup(u"متابعة التلاوة بعد إعادة التشغيل:\n%s" % (st.get("title") or u""), 6)
+        self.resume_last()
+
+    # -- the main 20-second tick ---------------------------------------------------------------------
+    def tick19(self):
+        now = time.time()
+        try:
+            self.journal_tick(now)
+        except Exception as e:
+            qlog("journal: %r" % (e,))
+        if now - self.t19 < 20:
+            return
+        self.t19 = now
+        lt = time.localtime(now)
+        today = time.strftime("%Y-%m-%d", lt)
+        fired = self.cfg.setdefault("fired19", {})
+
+        def once(key):
+            if fired.get(key) == today:
+                return False
+            fired[key] = today
+            self.save()
+            return True
+        for name, fn in (("wake", lambda: self.wake_tick(now)), ("kids", self.kids_tick),
+                         ("next", self.cache_next), ("mpre", lambda: self.mpre_tick(lt))):
+            try:
+                fn()
+            except Exception as e:
+                qlog("tick19 %s: %r" % (name, e))
+        if not self.boot_checked and now - self.boot > 40:
+            self.boot_checked = True
+            try:
+                note = safeupdate.rolled_back_note()
+                if note:
+                    msg = u"⚠️ الإصدار %s لم يعمل، فرجع البلاجين وحده إلى %s" % note
+                    popup(msg, 15)
+                    self.tg_notify(msg)
+                safeupdate.clear_pending()          # this version started fine
+            except Exception as e:
+                qlog("update check: %r" % (e,))
+            if self.cfg.get("boot_resume", False) and now - self.boot < 600:
+                self.boot_resume()
+        try:
+            if lt.tm_hour in (3, 4) and once("night19"):
+                _bg_thread(self.night_job)
+            if lt.tm_hour >= 9 and once("disk19"):
+                self.disk_watch()
+            if lt.tm_hour in (2, 3, 4, 5, 13, 14) and not Player.active and once("rot19"):
+                self.backup_rotate()
+            if lt.tm_mday == 1 and lt.tm_hour >= 10 and once("harvest19"):
+                prev = now - 2 * 86400
+                txt = studio.harvest_text(self.cfg, "month", prev)
+                self.tg_notify(txt)
+        except Exception as e:
+            qlog("daily19: %r" % (e,))
+
+    # -- wake the disk before what is scheduled ---------------------------------------------------------
+    def upcoming(self, now):
+        """'HH:MM' of the things that will play soon (schedules, adhan, reminders)."""
+        lt = time.localtime(now)
+        out = set()
+        for s in self.cfg.get("sched", []):
+            if s.get("on", True) and (not s.get("days") or lt.tm_wday in s["days"]):
+                out.add(s.get("hm"))
+        for k in ("wird_time", "kahf_time", "mulk_time", "tg_ayah_time", "tg_wird_time"):
+            if self.cfg.get(k):
+                out.add(self.cfg[k])
+        city = self.cfg.get("prayer_city")
+        if city and (self.cfg.get("prayer_mode", "notify") != "off" or self.cfg.get("fajr_wake")):
+            pt = extras.today_prayers(city, now) or {}
+            for key in ("fajr", "dhuhr", "asr", "maghrib", "isha"):
+                if key in pt:
+                    m = int(round(pt[key] * 60))
+                    out.add("%02d:%02d" % ((m // 60) % 24, m % 60))
+        return out
+
+    def wake_tick(self, now):
+        if not self.cfg.get("hdd_wake", True):
+            return
+        soon = time.localtime(now + 60)
+        hm = "%02d:%02d" % (soon.tm_hour, soon.tm_min)
+        if hm == self.wake_min or hm not in self.upcoming(now):
+            return
+        self.wake_min = hm
+        _bg_thread(self.wake_disk)
+
+    def wake_disk(self):
+        d = data.home_dir("system")
+        if not d:
+            return False
+        try:
+            with open(os.path.join(d, ".wake"), "w") as f:
+                f.write(str(time.time()))
+                f.flush()
+                os.fsync(f.fileno())          # this is what spins a sleeping disk up
+            return True
+        except Exception:
+            return False
+
+    # -- disk watch, cleaning, backups ----------------------------------------------------------------
+    def disk_watch(self):
+        d = data.home_dir()
+        if not d:
+            return
+        free = data.disk_free(d)
+        if free is not None and free < 1024 ** 3:
+            msg = u"⚠️ مساحة القرص قليلة: باقي %s فقط\nاحذف ملفات من «مكتبتي» أو قلّل حجم «ما سمعته سابقاً»" % data.fmt_bytes(free)
+            popup(msg, 12)
+            self.tg_notify(msg)
+        _bg_thread(self.clean_old)
+
+    def clean_old(self, days=30):
+        """Lists, pictures and temp files not used for a month (the audio and the drawn text have
+        their own limits)."""
+        removed = 0
+        now = time.time()
+        for sub in ("cache", "tmp"):
+            d = data.home_dir(sub)
+            if not d:
+                continue
+            for f in os.listdir(d):
+                path = os.path.join(d, f)
+                if os.path.isfile(path) and not f.startswith(("timing_", "qcom_seg_")) and \
+                        now - os.path.getmtime(path) > days * 86400:
+                    try:
+                        os.remove(path)
+                        removed += 1
+                    except OSError:
+                        pass
+        try:
+            AUDIO.trim()
+        except Exception:
+            pass
+        return removed
+
+    def backup_dir19(self):
+        return data.home_dir("backups")
+
+    def backup_rotate(self, now=None):
+        """A copy every day: the last 7 days and one for each of the last 4 weeks stay."""
+        d = self.backup_dir19()
+        if not d:
+            return None
+        now = now or time.time()
+        name = "settings_%s.json" % time.strftime("%Y-%m-%d", time.localtime(now))
+        path = os.path.join(d, name)
+        cfg = dict(self.cfg)
+        cfg.pop("tg_token", None)
+        _write_small(path, cfg)
+        files = sorted(f for f in os.listdir(d) if f.startswith("settings_") and f.endswith(".json"))
+        keep, weeks = set(files[-7:]), {}
+        for f in files:
+            try:
+                t = time.mktime(time.strptime(f[9:19], "%Y-%m-%d"))
+            except ValueError:
+                continue
+            wk = time.strftime("%Y-%W", time.localtime(t))
+            weeks[wk] = f                       # the last copy of each week
+        keep |= set(sorted(weeks.values())[-4:])
+        for f in files:
+            if f not in keep:
+                try:
+                    os.remove(os.path.join(d, f))
+                except OSError:
+                    pass
+        return path
+
+    def backups19(self):
+        d = self.backup_dir19()
+        if not d:
+            return []
+        return [(f[9:19], os.path.join(d, f)) for f in sorted(os.listdir(d), reverse=True)
+                if f.startswith("settings_") and f.endswith(".json")]
+
+    def restore19(self, path):
+        with open(path, "rb") as f:
+            cfg = json.loads(f.read().decode("utf-8"))
+        keep = dict((k, self.cfg.get(k)) for k in ("tg_token", "tg_owners", "remote_pin") if k in self.cfg)
+        self.cfg.clear()
+        self.cfg.update(cfg)
+        self.cfg.update(keep)
+        self.save()
+
+    # -- night: refresh the lists, timings of what you listen to -----------------------------------------
+    def night_job(self):
+        data.REFRESH.on = True
+        try:
+            for key in ("mp3q_reciters", "mp3q_radios", "qcom", "sq_reciters", "sq_radios", "sync", "tvq"):
+                try:
+                    rows = section_loader(key)()
+                    SEC_CACHE[key] = rows
+                except Exception as e:
+                    qlog("night refresh %s: %r" % (key, e))
+                time.sleep(2)
+        finally:
+            data.REFRESH.on = False
+        for rid in list(self.cfg.get("timing_used", []))[-3:]:     # the timed reciters you listen to
+            for n in range(1, 115):
+                try:
+                    data.ayat_timing(int(rid), n)
+                except Exception:
+                    pass
+                time.sleep(0.5)
+        try:
+            self.clean_old()
+        except Exception:
+            pass
+
+    # -- the whole mushaf drawn ahead (when the box sleeps, or late at night) ----------------------------
+    def mpre_sig(self):
+        return u"%s|%s|%s|%s" % (self.cfg.get("mushaf_style", "paper"), self.theme_idx(),
+                                 self.cfg.get("reader_font", 1), self.cfg.get("tajweed", True))
+
+    def mpre_tick(self, lt):
+        if not self.cfg.get("mushaf_pre", True) or not img_text() or not data.home_dir() or self.mpre is not None:
+            return
+        st = self.cfg.get("mpre") or {}
+        if st.get("sig") == self.mpre_sig() and st.get("page", 0) >= 604:
+            return
+        try:
+            from Screens.Standby import inStandby
+        except Exception:
+            inStandby = None
+        if not (inStandby or (lt.tm_hour in (1, 2, 3, 4, 5) and self.ui is None)):
+            return
+        if st.get("sig") != self.mpre_sig():
+            st = {"sig": self.mpre_sig(), "page": 0}
+            self.cfg["mpre"] = st
+        self.mpre = {"g": mushaf_ghost(), "q": [], "page": st["page"]}
+        self.mpre["timer"], self.mpre["c"] = make_timer(self.mpre_step)
+        self.mpre["timer"].start(150, False)
+
+    def mpre_step(self):
+        m = self.mpre
+        if m is None:
+            return
+        try:
+            from Screens.Standby import inStandby
+        except Exception:
+            inStandby = None
+        lt = time.localtime()
+        if not (inStandby or (lt.tm_hour in (1, 2, 3, 4, 5) and self.ui is None)) or self.cfg.get("mpre", {}).get("sig") != self.mpre_sig():
+            m["timer"].stop()
+            self.mpre = None
+            return
+        if not m["q"]:
+            if m["page"] >= 604:
+                m["timer"].stop()
+                self.mpre = None
+                self.cfg["mpre"]["page"] = 604
+                self.save()
+                return
+            m["page"] += 1
+            m["q"] = mushaf_page_jobs(m["g"], m["page"])
+            if m["page"] % 10 == 0:
+                self.cfg["mpre"]["page"] = m["page"] - 1
+                self.save()
+            return
+        args = m["q"].pop(0)
+        try:
+            qtext.render(*args)
+        except Exception as e:
+            qlog("mushaf pre: %r" % (e,))
+
+    # -- DLNA -------------------------------------------------------------------------------------------
+    def dlna_groups(self):
+        groups = []
+        try:
+            for rec, _f, items in library.scan():
+                groups.append((rec, [(lab, path) for _n, lab, path, _s, _e in items]))
+        except Exception:
+            pass
+        for d in self.cfg.get("disk_srcs", []):
+            try:
+                for name, folder in library.disk_reciters(d["path"]):
+                    groups.append((name, [(lab, p_) for _n, lab, p_ in library.disk_tracks(folder)]))
+            except Exception:
+                continue
+        try:
+            ents = AUDIO.entries()
+            if ents:
+                groups.append((u"ما سمعته سابقاً", [(t, localserve.path_of(u)) for t, u, _s in ents]))
+        except Exception:
+            pass
+        return groups
+
+    def dlna_set(self, on):
+        if on and self.dlna is None:
+            try:
+                self.dlna = dlna.Server(self.dlna_groups, u"Saad Quran Hub (%s)" % remote.local_ip())
+            except Exception as e:
+                qlog("dlna: %r" % (e,))
+                return False
+        elif not on and self.dlna is not None:
+            self.dlna.close()
+            self.dlna = None
+        return True
+
+    # -- the station as a channel in the channel list ----------------------------------------------------
+    STATION_BQ = "userbouquet.saadquranhub_station.radio"
+
+    def station_bouquet(self, on=True):
+        if not on:
+            studio.remove_bouquet(bq_file=self.STATION_BQ)
+            self.cfg["station_bq"] = False
+            self.save()
+            reload_bouquets()
+            return 0
+        url = self.station_url()
+        if not url:
+            raise ValueError(u"تعذّر تشغيل الإذاعة")
+        local = u"http://127.0.0.1:%d/radio/%s.mp3" % (localserve.HomeRadio.PORT, self.cfg["remote_pin"])
+        n = studio.build_bouquet([(u"📻 إذاعتي الخاصة - مكتبتي", local)], name=u"إذاعتي الخاصة", bq_file=self.STATION_BQ)
+        self.cfg["station_bq"] = True
+        self.save()
+        reload_bouquets()
+        return n
+
+    # -- children's stars --------------------------------------------------------------------------------
+    def kids_tick(self):
+        k = self.kids_run
+        if not k:
+            return
+        if Player.active and self.pl is k["pl"]:
+            k["max"] = max(k["max"], self.pi + 1)
+            return
+        self.kids_run = None
+        if k["max"] >= max(1, int(len(k["pl"]) * 0.9)):
+            n = studio.star_add(self.cfg, u"سورة %s في وضع الأطفال" % data.surah_name(k["n"]))
+            self.save()
+            msg = u"⭐ أحسنت! نجمة جديدة (المجموع %d)" % n
+            popup(msg, 6)
+            self.tg_notify(u"%s: %s" % (self.cfg.get("profile") or u"", msg))
+
+
+def mushaf_ghost():
+    """A mushaf screen that is never shown: it cuts the pages exactly like the real one."""
+    g = QHMushaf.__new__(QHMushaf)
+    th = g.page_theme(THEMES[BG.theme_idx()])
+    g.qh_th = th
+    g.qh_bgc = "#101418" if th["bg"] == "transparent" else th["bg"]
+    g.qh_fi = min(len(g.FONTS) - 1, max(0, int(BG.cfg.get("reader_font", 1))))
+    g.qh_fs = g.FONTS[g.qh_fi]
+    g.qh_rowh, g.qh_rows = g.geometry(g.qh_fs)
+    g.qh_hl, g.qh_hl_roles, g.qh_pg = None, None, 0
+    g.qh_pages = [[(u"", set(), False)]]
+    return g
+
+
+def mushaf_page_jobs(g, page):
+    """-> [qtext.render arguments] of every line of one mushaf page (as QHMushaf draws it)."""
+    blocks, _refs = studio.page_blocks(page)
+    g.qh_pg = 0
+    g.paginate(blocks, flow=True)
+    jobs = []
+    for k in range(len(g.qh_pages)):
+        g.qh_pg = k
+        for text, fg, _back, cols, _al, just in g.line_specs(g.qh_pages[k], True):
+            if text.strip():
+                jobs.append((text, g.img_px(), fg, p(g.qh_rowh), cols, just))
+    return jobs
+
+
+def reload_bouquets():
+    try:
+        from enigma import eDVBDB
+        eDVBDB.getInstance().reloadBouquets()
+    except Exception as e:
+        qlog("bouquet reload: %r" % (e,))
+
+
+class Background(Hub16Bg, Hub17Bg, Hub18Bg, Hub19Bg):
     """Everything that must survive closing/minimising the screen."""
 
     def __init__(self):
@@ -2305,6 +2827,17 @@ class Background(Hub16Bg, Hub17Bg, Hub18Bg):
             self.init16()
         except Exception as e:
             qlog("init16: %r" % (e,))
+        if not getattr(self, "ready19", False):
+            self.ready19 = True
+            try:
+                self.init19()
+                extras.URL_FIX[0] = AUDIO.remote_for          # history keeps the internet address
+                if self.cfg.get("dlna"):
+                    self.dlna_set(True)
+                if self.cfg.get("station_bq"):
+                    self.station_url()                          # the channel needs the stream running
+            except Exception as e:
+                qlog("init19: %r" % (e,))
 
     gap_timer = None
     _c6 = None
@@ -2562,7 +3095,7 @@ class Background(Hub16Bg, Hub17Bg, Hub18Bg):
             return
         if isinstance(result, Exception):
             return self.resolve_failed(result, tok)
-        self.start_play(result, title, live)
+        self.start_play(self.cache_swap(result, title, live), title, live)
 
     # -- output mode ----------------------------------------------------------------------
     def main_has_tv(self):
@@ -3674,7 +4207,7 @@ class Background(Hub16Bg, Hub17Bg, Hub18Bg):
         if not Player.active or not self.cur_url or self.cur_live or self.adhan_prev is not None:
             return
         pp = self.play_pos()
-        self.cfg["resume"] = {"title": Player.cur_title, "url": self.cur_url,
+        self.cfg["resume"] = {"title": Player.cur_title, "url": self.real_url(self.cur_url),
                               "pos": int(pp[0]) if pp else 0, "ctx": self.ctx or {}}
         self.save()
 
@@ -4325,6 +4858,10 @@ class Background(Hub16Bg, Hub17Bg, Hub18Bg):
                 return None, False
             read, matched = r["id"], True
         key = (read, n)
+        tu = self.cfg.setdefault("timing_used", [])
+        if read not in tu[-5:]:
+            tu.append(read)
+            del tu[:-5]
         v = self.timing_cache.get(key)
         if v is None:
             self.timing_cache[key] = "pending"
@@ -4893,6 +5430,23 @@ class QHMiniBar(Screen):
         if self.remote_on():
             self.qh_bg.toggle_pause()
 
+
+_start_item_33 = Background.start_item
+
+
+def _start_item_kept(self, item):
+    """2.0: a kept copy on the disk plays instead of the internet file (start_item itself is unchanged)."""
+    try:
+        if item.get("url") and not item.get("live"):
+            u = self.cache_swap(item["url"], item.get("title", u""), False)
+            if u != item["url"]:
+                item = dict(item, url=u)
+    except Exception as e:
+        qlog("kept copy: %r" % (e,))
+    return _start_item_33(self, item)
+
+
+Background.start_item = _start_item_kept
 
 BG = Background()
 
@@ -6517,7 +7071,9 @@ def studio_kids(session):
             return
         st = studio.kids_state(c[1])
         BG.ctx = None
-        BG.play_list(studio.hifz_items(st), 0, None)
+        items = studio.hifz_items(st)
+        BG.play_list(items, 0, None)
+        BG.kids_run = {"pl": items, "n": c[1], "max": 0}
         BG.set_status(u"وضع الأطفال: سورة %s مع الحصري المعلّم" % data.surah_name(c[1]), notify=True)
         session.open(QHReader, c[1], "text")
     _studio_ask(session, u"وضع الأطفال والأسرة: الشيخ يقرأ الآية 3 مرات ثم مهلة للترديد",
@@ -6984,6 +7540,12 @@ class QuranHub(Screen):
                     ks += ["tg:" + u for u, _n in tg_channels(BG.cfg)]
                 elif k == "@dsk":
                     ks += ["dsk:" + d["path"] for d in BG.cfg.get("disk_srcs", [])]
+                elif k == "@acache":                 # shown once something has been kept
+                    try:
+                        if AUDIO.entries():
+                            ks.append("acache")
+                    except Exception:
+                        pass
                 else:
                     ks.append(k)
             ks = [k for k in ks if k in idx]
@@ -7524,7 +8086,9 @@ class QuranHub(Screen):
         it = [(u"إذاعتي الخاصة: كل المكتبة عشوائياً", lambda: BG.station_play(None, True)),
               (u"إذاعتي الخاصة: كل المكتبة بالترتيب", lambda: BG.station_play(None, False)),
               (u"إذاعتي الخاصة: قارئ واحد ...", self.station_one),
-              (u"رابط الإذاعة لأجهزة البيت ...", self.station_link)]
+              (u"رابط الإذاعة لأجهزة البيت ...", self.station_link),
+              ((u"إزالة «إذاعتي الخاصة» من قائمة الراديو" if BG.cfg.get("station_bq") else
+                u"إضافة «إذاعتي الخاصة» كقناة في قائمة الراديو"), self.station_channel)]
         self._menu(u"إذاعتي الخاصة", it)
 
     def station_one(self):
@@ -7539,6 +8103,127 @@ class QuranHub(Screen):
             return self.qh_status_text(u"تعذّر تشغيل إذاعة البيت")
         _studio_info(self.session, u"افتح هذا الرابط من الجوال أو أي جهاز على نفس شبكة البيت:\n\n%s\n\n"
                                    u"(ملفات MP3 من مكتبتك تعمل بلا توقف وبترتيب عشوائي)" % url)
+
+    # ================================================================== 2.0 menus
+    def menu_hdd(self):
+        cfg = BG.cfg
+        d = data.home_dir()
+        if not d:
+            return _studio_info(self.session, u"لا يوجد HDD أو فلاشة متصلة.\nالبلاجين يعمل كالمعتاد، وهذه المزايا تحتاج قرصاً.")
+        free = data.disk_free(d)
+        it = [(u"القرص: %s  •  المتاح %s" % (os.path.dirname(d), data.fmt_bytes(free) if free is not None else u"?"), lambda: None),
+              (u"حفظ ما أسمعه على القرص (يعمل بدون إنترنت): %s" % self._on(cfg.get("audio_cache", True)), self.acache_toggle),
+              (u"الحد الأقصى لما سمعته سابقاً: %s جيجا (المستخدم %s)" % (
+                  cfg.get("audio_quota", 20), data.fmt_bytes(AUDIO.total())), self.acache_quota),
+              (u"مسح ما سمعته سابقاً من القرص", self.acache_clear),
+              (u"رسم المصحف كاملاً مسبقاً (أثناء الانتظار أو ليلاً): %s  (%d/604)" % (
+                  self._on(cfg.get("mushaf_pre", True)), int((cfg.get("mpre") or {}).get("page", 0))),
+               lambda: BG.toggle_flag("mushaf_pre", True, u"رسم المصحف مسبقاً")),
+              (u"إيقاظ القرص قبل الأذان والمواعيد: %s" % self._on(cfg.get("hdd_wake", True)),
+               lambda: BG.toggle_flag("hdd_wake", True, u"إيقاظ القرص قبل المواعيد")),
+              (u"متابعة التلاوة تلقائياً بعد انقطاع الكهرباء: %s" % self._on(cfg.get("boot_resume", False)),
+               lambda: BG.toggle_flag("boot_resume", False, u"المتابعة بعد إعادة التشغيل")),
+              (u"تنظيف الملفات المؤقتة القديمة الآن", self.hdd_clean),
+              (u"النسخ اليومية للإعدادات (آخر 7 أيام + 4 أسابيع) ...", self.menu_backups19)]
+        self._menu(u"القرص والسرعة والثبات", it)
+
+    def acache_toggle(self):
+        BG.cfg["audio_cache"] = not BG.cfg.get("audio_cache", True)
+        AUDIO.enabled = BG.cfg["audio_cache"]
+        BG.save()
+        self.qh_status_text(u"حفظ ما أسمعه على القرص: %s" % self._on(BG.cfg["audio_cache"]))
+
+    def acache_quota(self):
+        def setq(c=None):
+            if c:
+                BG.cfg["audio_quota"] = c[1]
+                AUDIO.quota = int(c[1] * 1024 ** 3)
+                BG.save()
+                _bg_thread(AUDIO.trim)
+                self.qh_status_text(u"الحد الأقصى: %s جيجا" % c[1])
+        self._choice(u"أقصى مساحة لما سمعته سابقاً", [(u"%s جيجا" % g, g) for g in (2, 5, 10, 20, 50, 100)], setq)
+
+    def acache_clear(self):
+        _bg_thread(AUDIO.clear)
+        self.qh_status_text(u"جاري المسح ...")
+
+    def hdd_clean(self):
+        n = BG.clean_old()
+        self.qh_status_text(u"تم حذف %d ملفاً قديماً" % n)
+
+    def menu_backups19(self):
+        rows = BG.backups19()
+        it = [(u"حفظ نسخة الآن", lambda: (BG.backup_rotate(), self.qh_status_text(u"تم الحفظ")))]
+        it += [(u"استعادة نسخة يوم %s" % day, (lambda q=path: self.restore19_ask(q))) for day, path in rows]
+        if not rows:
+            it.append((u"(تُحفظ نسخة كل يوم تلقائياً)", lambda: None))
+        self._menu(u"النسخ اليومية للإعدادات", it)
+
+    def restore19_ask(self, path):
+        def go(yes=None):
+            if yes:
+                BG.restore19(path)
+                self.qh_status_text(u"تمت الاستعادة - أعد فتح البلاجين")
+        try:
+            from Screens.MessageBox import MessageBox
+            self.session.openWithCallback(go, MessageBox, u"استعادة الإعدادات والمفضلة من هذه النسخة؟", MessageBox.TYPE_YESNO)
+        except Exception:
+            go(True)
+
+    def menu_rollback(self):
+        snaps = safeupdate.snapshots()
+        if not snaps:
+            return self.qh_status_text(u"لا توجد نسخة سابقة محفوظة (تُحفظ تلقائياً عند كل تحديث)")
+
+        def go(c=None):
+            if not c:
+                return
+            try:
+                safeupdate.restore(c[1])
+                self.update_done()
+            except Exception as e:
+                self.qh_status_text(u"تعذّر الرجوع: %s" % e)
+        self._choice(u"الرجوع لإصدار سابق", [(u"الرجوع إلى الإصدار %s" % safeupdate.snap_version(p_), p_)
+                                            for _t, p_ in snaps], go)
+
+    def menu_profiles19(self):
+        studio_profiles(self.session)
+
+    def show_harvest(self, period="month"):
+        txt = studio.harvest_text(BG.cfg, period)
+        self.session.open(QHText, u"الحصاد", [txt], u"", False)
+        if BG.bot is not None:
+            BG.tg_notify(txt)
+
+    def show_stars(self):
+        lines = [studio.stars_text(BG.cfg), u"", u"نجوم كل أفراد الأسرة:"]
+        lines += [u"• %s: %d" % (p_, n) for p_, n in studio.stars_of(BG.cfg)]
+        self.session.open(QHText, u"⭐ النجوم - %s" % (BG.cfg.get("profile") or studio.profiles(BG.cfg)[0]),
+                          [u"\n".join(lines)], u"", False)
+
+    def menu_dlna(self):
+        on = BG.dlna is not None
+        it = [(u"مكتبتي لأجهزة البيت (DLNA): %s" % self._on(on), self.dlna_toggle)]
+        if on:
+            it.append((u"ابحث في التلفزيون أو الجوال عن «Saad Quran Hub» في الوسائط / DLNA", lambda: None))
+        self._menu(u"مكتبتي لأجهزة البيت", it)
+
+    def dlna_toggle(self):
+        want = BG.dlna is None
+        ok = BG.dlna_set(want)
+        BG.cfg["dlna"] = want and ok
+        BG.save()
+        self.qh_status_text(u"DLNA: %s" % (u"يعمل" if BG.cfg["dlna"] else (u"متوقف" if ok else u"تعذّر التشغيل")))
+
+    def station_channel(self):
+        try:
+            if BG.cfg.get("station_bq"):
+                BG.station_bouquet(False)
+                return self.qh_status_text(u"أُزيلت قناة «إذاعتي الخاصة» من قائمة القنوات")
+            BG.station_bouquet(True)
+            self.qh_status_text(u"أُضيفت «إذاعتي الخاصة» إلى قائمة الراديو - تعمل بدون فتح البلاجين")
+        except Exception as e:
+            self.qh_status_text(u"تعذّر: %s" % e)
 
     def menu_lang(self):
         self._choice(u"اللغة / Language", [(u"العربية", "ar"), (u"English", "en")], self._lang_set)
@@ -7603,6 +8288,12 @@ class QuranHub(Screen):
                (u"الصلاة والجدولة والتذكيرات ...", self.menu_time),
                (u"🌙 رمضان والمناسبات ...", self.menu_ramadan),
                (u"📻 إذاعتي الخاصة ...", self.menu_station),
+               (u"💽 القرص والسرعة والثبات ...", self.menu_hdd),
+               (u"👪 الملف الشخصي: %s ..." % (BG.cfg.get("profile") or studio.profiles(BG.cfg)[0]), self.menu_profiles19),
+               (u"🌾 حصاد الشهر", lambda: self.show_harvest("month")),
+               (u"🌾 حصاد السنة", lambda: self.show_harvest("year")),
+               (u"⭐ النجوم", self.show_stars),
+               (u"📡 مكتبتي لأجهزة البيت (DLNA) ...", self.menu_dlna),
                (u"المظهر والعرض والاختصارات ...", self.menu_display),
                (u"التحكم من الجوال ...", self.menu_phone),
                (u"قنوات تليجرام (إضافة / حذف) ...", self.menu_tg),
@@ -8805,6 +9496,7 @@ class QuranHub(Screen):
         if not private_edition():
             it.append((u"إضافة مصدر التحديث الرسمي (feed) إلى الجهاز", BG.feed_add))
         it.append((u"ما الجديد في هذا الإصدار", self.show_whats_new))
+        it.append((u"الرجوع لإصدار سابق ...", self.menu_rollback))
         it.append((u"الإصدار الحالي: %s" % PLUGIN_VERSION, lambda: None))
         self._menu(u"تحديث البلاجين", it0 + it)
 
@@ -8814,6 +9506,7 @@ class QuranHub(Screen):
             return BG.gh_check(manual=True)
         BG.cfg["update_url"] = gh["ipk"]
         BG.save()
+        self.qh_expect_sha = gh.get("sha256") or None
         self.update_from_url()
 
     def set_update_url(self):
@@ -8844,6 +9537,16 @@ class QuranHub(Screen):
         Runner().run(job, done, done)
 
     def install_ipk(self, path):
+        sha, self.qh_expect_sha = getattr(self, "qh_expect_sha", None), None
+        try:
+            ver = safeupdate.verify_ipk(path, sha)
+        except Exception as e:
+            return self.qh_status_text(u"لم أثبّت التحديث: %s" % e)
+        try:
+            if safeupdate.snapshot(PLUGIN_VERSION):        # the running version stays on the disk
+                safeupdate.mark_pending(ver, PLUGIN_VERSION)
+        except Exception as e:
+            qlog("snapshot: %r" % (e,))
         try:
             from Screens.Console import Console
             self.session.openWithCallback(self.update_done, Console, title=u"تحديث Saad Quran Hub",

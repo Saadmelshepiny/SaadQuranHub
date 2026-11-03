@@ -232,6 +232,8 @@ COMMANDS = [
     {"command": "wird", "description": u"ورد الحفظ أو المراجعة الآن"},
     {"command": "backup", "description": u"نسخة احتياطية من الإعدادات"},
     {"command": "station", "description": u"رابط إذاعتي الخاصة"},
+    {"command": "stars", "description": u"نجوم الأسرة"},
+    {"command": "harvest", "description": u"حصاد الشهر"},
     {"command": "stop", "description": u"إيقاف التشغيل"},
     {"command": "help", "description": u"المساعدة"},
 ]
