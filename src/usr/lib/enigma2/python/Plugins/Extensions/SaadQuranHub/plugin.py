@@ -59,7 +59,7 @@ from . import tgbot
 from . import localserve
 from . import i18n
 
-PLUGIN_VERSION = "1.1"
+PLUGIN_VERSION = "1.2"
 GITHUB_REPO = "Saadmelshepiny/SaadQuranHub"
 GITHUB_INFO = "https://raw.githubusercontent.com/%s/main/version.json" % GITHUB_REPO
 
@@ -200,16 +200,42 @@ SLEEP_STEPS = [0, 15, 30, 60, 90, 120]
 TV_SIZES = [(u"كامل", 0.0, 0.0, 1.0, 1.0), (u"كبير", 0.1, 0.1, 0.8, 0.8),
             (u"متوسط", 0.55, 0.05, 0.4, 0.4), (u"صغير", 0.7, 0.05, 0.27, 0.27)]
 
-LOG_PATH = "/tmp/quranhub.log"
+LOG_PATH = "/tmp/quranhub.log"          # without a disk; with one: <disk>/QuranHub/logs/quranhub.log
+_LOG = ["", 0.0]
+
+
+def log_path():
+    now = time.time()
+    if now - _LOG[1] > 60:
+        _LOG[1] = now
+        try:
+            d = data.home_dir("logs")
+        except Exception:
+            d = None
+        p = os.path.join(d, "quranhub.log") if d else "/tmp/quranhub.log"
+        if p != _LOG[0]:
+            _LOG[0] = p
+            if d:                        # the old place still works (a link, no RAM used)
+                try:
+                    if os.path.islink("/tmp/quranhub.log") or os.path.exists("/tmp/quranhub.log"):
+                        os.remove("/tmp/quranhub.log")
+                    os.symlink(p, "/tmp/quranhub.log")
+                except Exception:
+                    pass
+    return _LOG[0]
 
 
 def qlog(msg):
     """Tiny event log (/tmp/quranhub.log) to understand 'sometimes it works'."""
     try:
         import os
-        if os.path.exists(LOG_PATH) and os.path.getsize(LOG_PATH) > 100000:
-            os.remove(LOG_PATH)
-        with open(LOG_PATH, "ab") as f:
+        lp = log_path()
+        if os.path.exists(lp) and os.path.getsize(lp) > (400000 if lp != LOG_PATH else 100000):
+            try:
+                os.rename(lp, lp + ".1")          # keep the previous log too (on the disk)
+            except Exception:
+                os.remove(lp)
+        with open(lp, "ab") as f:
             f.write((u"%s %s\n" % (time.strftime("%H:%M:%S"), msg)).encode("utf-8"))
     except Exception:
         pass
@@ -1885,8 +1911,11 @@ class Hub17Bg(object):
 
 
 
-BUILD = 18             # one number for both editions (the "what's new" screen and the changelog)
+BUILD = 19             # one number for both editions (the "what's new" screen and the changelog)
 CHANGELOG = [
+    (19, [u"كل ملفات البلاجين على الـHDD: الذاكرة المؤقتة، الحروف المرسومة، السجل، الملفات المؤقتة",
+          u"نسخة من الإعدادات على الـHDD تُحفظ مع كل تغيير، وترجع وحدها بعد تثبيت صورة جديدة",
+          u"ذاكرة الجهاز (RAM) أخف، والمصحف أسرع بعد إعادة التشغيل لأن الأسطر المرسومة محفوظة"]),
     (18, [u"وضع رمضان: تنبيه قبل الإفطار والسحور، جزء كل ليلة بقارئ تختاره، وتذكير بليالي العشر الأواخر",
           u"تذكير بالمناسبات الهجرية: عرفة، العيدان، عاشوراء، الأيام البيض، بداية رمضان",
           u"ورد الحفظ أو المراجعة يصلك على تليجرام كل يوم بالصوت والنص",
@@ -2075,7 +2104,7 @@ class Hub18Bg(object):
         self.bot.send_media_group(chat, urls, u"%s - سورة %s (%d-%d)" % (studio.HIFZ_RECITERS[rec][0], data.surah_name(n), a1, a2))
 
     def tg_backup(self, chat):
-        path = "/tmp/saadquranhub_backup.json"
+        path = data.tmp_path("saadquranhub_backup.json")
         cfg = dict(self.cfg)
         for k in ("tg_token", "tg_owners", "remote_pin"):
             cfg.pop(k, None)                       # never inside a file that leaves the receiver
@@ -3496,7 +3525,7 @@ class Background(Hub16Bg, Hub17Bg, Hub18Bg):
             u"Timeshift: %s  minibar=%s  remote=%s" % (self.cfg.get("timeshift", True),
                                                       self.cfg.get("minibar", True), self.cfg.get("remote", True)),
             u"Net: %s" % (self.net_text() or u"-"),
-            u"Log: %s" % LOG_PATH,
+            u"Log: %s" % log_path(),
         ]
         qlog("DIAG " + " | ".join(lines))
         return u"\n".join(lines)
@@ -3540,6 +3569,9 @@ class Background(Hub16Bg, Hub17Bg, Hub18Bg):
             d = data.record_dir()
             if d:
                 qtext.WW_FILE = os.path.join(d, ".saadquranhub_widths.bin")
+                tc = data.home_dir("cache/text")
+                if tc:
+                    qtext.set_cache(tc)               # drawn Quran lines: on the disk, kept across restarts
         except Exception:
             pass
         if not self.cfg.get("migr_saad14"):          # 1.4: Arabic drawn as pictures
@@ -4913,8 +4945,8 @@ def text_pixmap(text, px, color, h, colors=None, justify=None):
                 pix = LoadPixmap(path, cached=False)
             except TypeError:
                 pix = LoadPixmap(path)
-            if len(_PIXC) > 60:              # a few pages of decoded lines stay in memory
-                for k in list(_PIXC)[:20]:
+            if len(_PIXC) > 40:              # about three pages of decoded lines stay in memory
+                for k in list(_PIXC)[:15]:
                     del _PIXC[k]
             _PIXC[path] = pix
         return pix, w
@@ -5839,7 +5871,7 @@ class QHShare(Screen):
         n, a = self.qs_n, self.qs_a
         url = "https://quran.com/%d/%d" % (n, a)
         try:
-            path = "/tmp/sqh_qr.png"
+            path = data.tmp_path("sqh_qr.png")
             size = qr_png(url, path, scale=max(4, p(400) // 41))
             from Tools.LoadPixmap import LoadPixmap
             try:
@@ -7402,6 +7434,7 @@ class QuranHub(Screen):
     def key_exit(self):
         """Close the screen AND stop everything."""
         BG.stop_all()
+        data.save_settings(BG.cfg, now=True)          # disk + flash copy now
         self.close()
 
     def key_minimise(self):
@@ -8793,7 +8826,7 @@ class QuranHub(Screen):
 
     def update_from_url(self):
         url = BG.cfg.get("update_url")
-        dst = "/tmp/saadquranhub_update.ipk"
+        dst = data.tmp_path("saadquranhub_update.ipk")
 
         def job():
             raw = data.http_get(url, timeout=60)
@@ -10128,9 +10161,19 @@ def autostart(reason, **kwargs):
             qlog("boot timer: %s" % e)
 
 
+def autostop(reason, **kwargs):
+    """Restart / shutdown of the receiver: write the settings to the disk and the flash copy now."""
+    if reason == 1:
+        try:
+            data.save_settings(BG.cfg, now=True)
+        except Exception:
+            pass
+
+
 def Plugins(**kwargs):
     return [
         PluginDescriptor(where=PluginDescriptor.WHERE_SESSIONSTART, fnc=autostart),
+        PluginDescriptor(where=PluginDescriptor.WHERE_AUTOSTART, fnc=autostop),
         PluginDescriptor(
             name=u"Saad Quran Hub - القرآن الكريم",
             description=u"Quran reciters and radios (mp3quran, quran.com, surahquran)",

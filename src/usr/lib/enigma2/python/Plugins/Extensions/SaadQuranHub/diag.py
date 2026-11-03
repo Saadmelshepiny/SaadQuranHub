@@ -242,9 +242,9 @@ def save_report(rows):
     paths = []
     cands = ["/tmp/quranhub_diag.txt"]
     try:
-        d = data.record_dir()
+        d = data.home_dir()
         if d:
-            cands.insert(0, os.path.join(d, "quranhub_diag.txt"))
+            cands = [os.path.join(d, "quranhub_diag.txt")]        # the disk only: nothing left in RAM
     except Exception:
         pass
     for p in cands:

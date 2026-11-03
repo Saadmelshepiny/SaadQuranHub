@@ -752,6 +752,38 @@ def record_dir(bases=None, require_mount=True):
     return None
 
 
+# ----------------------------------------------------------------- everything of the plugin on the disk (1.9)
+_HOME = [None, 0.0]
+
+
+def home_dir(sub=""):
+    """<HDD/USB>/QuranHub[/sub] (looked up at most once a minute), or None when no disk is attached.
+    Caches, logs, temporary files and a copy of the settings live here, never in RAM (/tmp) or flash."""
+    now = time.time()
+    if now - _HOME[1] > 60 or (_HOME[0] and not os.path.isdir(_HOME[0])):
+        try:
+            _HOME[0] = record_dir()
+        except Exception:
+            _HOME[0] = None
+        _HOME[1] = now
+    d = _HOME[0]
+    if not d:
+        return None
+    if sub:
+        d = os.path.join(d, sub)
+        try:
+            if not os.path.isdir(d):
+                os.makedirs(d)
+        except OSError:
+            return None
+    return d
+
+
+def tmp_path(name):
+    """A temporary file on the disk (falls back to /tmp only without a disk)."""
+    return os.path.join(home_dir("tmp") or "/tmp", name)
+
+
 def safe_name(s):
     s = re.sub(r'[\\/:*?"<>|\r\n\t]+', "_", s or "")
     return s.strip(" ._")[:60] or "quran"
@@ -1030,20 +1062,111 @@ SETTINGS_PATH = "/etc/enigma2/quranhub.json"
 DEFAULTS = {"fmt": "original", "engine": 4097, "theme": 0, "fav": []}
 
 
-def load_settings(path=None):
-    cfg = json.loads(json.dumps(DEFAULTS))
+ETC_EVERY = 1800          # the flash copy is refreshed at most every 30 minutes (the disk copy on every change)
+
+
+def settings_disk_path():
+    d = home_dir("system")
+    return os.path.join(d, "settings.json") if d else None
+
+
+def _read_json(path):
     try:
-        with open(path or SETTINGS_PATH, "rb") as f:
-            cfg.update(json.loads(f.read().decode("utf-8")))
+        with open(path, "rb") as f:
+            c = json.loads(f.read().decode("utf-8"))
+        return c if isinstance(c, dict) else None
     except Exception:
-        pass
+        return None
+
+
+def _write_atomic(path, raw):
+    """Write then rename: a power cut never leaves half a settings file."""
+    try:
+        tmp = path + ".new"
+        with open(tmp, "wb") as f:
+            f.write(raw)
+            f.flush()
+            try:
+                os.fsync(f.fileno())
+            except Exception:
+                pass
+        os.rename(tmp, path)
+        return True
+    except Exception:
+        return False
+
+
+def load_settings(path=None):
+    """The newest of the disk copy and the flash copy (a new image keeps everything from the disk)."""
+    cfg = json.loads(json.dumps(DEFAULTS))
+    if path:
+        c = _read_json(path)
+    else:
+        c = None
+        for p in (settings_disk_path(), SETTINGS_PATH):
+            x = _read_json(p) if p else None
+            if x is not None and (c is None or x.get("_saved", 0) > c.get("_saved", 0)):
+                c = x
+    if c:
+        cfg.update(c)
     return cfg
 
 
-def save_settings(cfg, path=None):
+class _SettingsWriter(object):
+    """Saves happen in the background (a sleeping disk never freezes the screen); the newest wins."""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.ev = threading.Event()
+        self.raw = None
+        self.force_etc = False
+        self.etc_at = 0.0
+        self.thread = None
+
+    def put(self, raw, force_etc=False):
+        with self.lock:
+            self.raw = raw
+            self.force_etc = self.force_etc or force_etc
+        if self.thread is None or not self.thread.is_alive():
+            self.thread = threading.Thread(target=self.run)
+            self.thread.daemon = True
+            self.thread.start()
+        self.ev.set()
+
+    def run(self):
+        while True:
+            self.ev.wait(600)
+            self.ev.clear()
+            with self.lock:
+                raw, force, self.raw, self.force_etc = self.raw, self.force_etc, None, False
+            if raw is None:
+                continue
+            self.write(raw, force)
+
+    def write(self, raw, force=False):
+        disk = settings_disk_path()
+        ok = bool(disk) and _write_atomic(disk, raw)
+        now = time.time()
+        if force or not ok or now - self.etc_at > ETC_EVERY:
+            if _write_atomic(SETTINGS_PATH, raw):
+                self.etc_at = now
+                ok = True
+        return ok
+
+
+WRITER = _SettingsWriter()
+
+
+def save_settings(cfg, path=None, now=False):
+    """path -> that file only (tests, exports).  Otherwise: the disk copy + a flash copy every 30 min."""
     try:
-        with open(path or SETTINGS_PATH, "wb") as f:
-            f.write(json.dumps(cfg, ensure_ascii=False).encode("utf-8"))
+        if path:
+            return _write_atomic(path, json.dumps(cfg, ensure_ascii=False).encode("utf-8"))
+        cfg["_saved"] = time.time()
+        raw = json.dumps(cfg, ensure_ascii=False).encode("utf-8")
+        if now:
+            return WRITER.write(raw, True)
+        WRITER.put(raw)
         return True
     except Exception:
         return False

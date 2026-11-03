@@ -488,6 +488,16 @@ def render(text, px, color=0xffffff, height=None, colors=None, justify=None):
     meta = _META.get(path)
     if meta and os.path.exists(path):
         return path, meta[0], meta[1]
+    if meta is None:                     # drawn in an earlier session: the disk keeps it across restarts
+        try:
+            with open(path, "rb") as f:
+                hd = f.read(24)
+            if hd[12:16] == b"IHDR":
+                w, h = struct.unpack(">II", hd[16:24])
+                _META[path] = (w, h)
+                return path, w, h
+        except Exception:
+            pass
     w, h, alpha, cbuf, pal = compose(text, px, height, colors, justify)
     if not os.path.isdir(CACHE_DIR):
         os.makedirs(CACHE_DIR)
@@ -503,7 +513,32 @@ def render(text, px, color=0xffffff, height=None, colors=None, justify=None):
 _META = {}
 
 
-def _trim_cache(keep=600):
+KEEP = [600]
+
+
+def set_cache(d, keep=6000):
+    """Keep the drawn lines on the HDD/USB (not in RAM), and many more of them."""
+    global CACHE_DIR
+    CACHE_DIR = d
+    KEEP[0] = keep
+    import threading
+
+    def trim():
+        try:
+            fs = os.listdir(d)
+            if len(fs) > keep + 500:
+                fs = sorted((os.path.getmtime(os.path.join(d, f)), f) for f in fs)
+                for _t, f in fs[:-keep]:
+                    os.remove(os.path.join(d, f))
+        except Exception:
+            pass
+    t = threading.Thread(target=trim)
+    t.daemon = True
+    t.start()
+
+
+def _trim_cache(keep=None):
+    keep = keep or KEEP[0]
     if len(_META) < keep + 200:
         return
     try:

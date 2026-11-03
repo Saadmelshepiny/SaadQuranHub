@@ -1,5 +1,5 @@
 {
-  "version": "1.1",
-  "ipk": "https://raw.githubusercontent.com/Saadmelshepiny/SaadQuranHub/main/ipk/enigma2-plugin-extensions-saadquranhub_1.1_all.ipk",
-  "notes": "وضع رمضان والمناسبات الهجرية • إذاعتي الخاصة • ورد الحفظ والنسخ الاحتياطي عبر تليجرام • مؤقت نوم بخفض تدريجي • الوضع المبسّط • English UI • مصدر opkg"
+  "version": "1.2",
+  "ipk": "https://raw.githubusercontent.com/Saadmelshepiny/SaadQuranHub/main/ipk/enigma2-plugin-extensions-saadquranhub_1.2_all.ipk",
+  "notes": "كل ملفات البلاجين على الـHDD (الذاكرة المؤقتة والسجل والملفات المؤقتة ونسخة من الإعدادات) • ذاكرة أخف وسرعة أكبر بعد إعادة التشغيل"
 }
