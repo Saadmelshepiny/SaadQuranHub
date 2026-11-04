@@ -75,7 +75,7 @@ class AudioCache(object):
     # -- lookups -----------------------------------------------------------------------------------
     def local_for(self, url):
         """-> local (127.0.0.1) address of a kept copy, or None."""
-        if not url or not self.enabled:
+        if not url or not self.enabled or self.index is None:
             return None
         d = self.folder()
         if not d:
@@ -85,12 +85,21 @@ class AudioCache(object):
         if not e:
             return None
         path = os.path.join(d, e["f"])
-        if not os.path.exists(path):
-            with self.lock:
+        if data.disk_awake() and not os.path.exists(path):     # asleep: trust the index (the player's
+            with self.lock:                                     # own thread will wait for the disk)
                 self._load().pop(url, None)
             return None
         e["t"] = int(time.time())
         return localserve.url_for(path)
+
+    def has_entries(self):
+        """From memory only (safe on the screen's thread)."""
+        return bool(self.index)
+
+    def preload(self):
+        """(disk thread) read the index once at start."""
+        with self.lock:
+            self._load()
 
     def remote_for(self, url):
         """The internet address behind a kept copy (history / resume keep the real address)."""

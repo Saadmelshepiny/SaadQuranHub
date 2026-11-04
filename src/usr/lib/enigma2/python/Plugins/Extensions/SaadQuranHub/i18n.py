@@ -28,7 +28,7 @@ EN = {
     u"حفظ نسخة الآن": u"Save a copy now",
     u"إضافة «إذاعتي الخاصة» كقناة في قائمة الراديو": u"Add 'My station' as a radio channel",
     u"إزالة «إذاعتي الخاصة» من قائمة الراديو": u"Remove 'My station' from the radio list",
-    u"رسم المصحف كاملاً مسبقاً (أثناء الانتظار أو ليلاً)": u"Pre-draw the whole mushaf (standby / night)",
+    u"رسم المصحف كاملاً مسبقاً (أثناء وضع الانتظار)": u"Pre-draw the whole mushaf (in standby)",
     u"قارئ اليوم": u"Reciter of the day",
     # sources / groups / headers
     u"المفضلة": u"Favourites", u"القراء والمصاحف": u"Reciters", u"الإذاعات المباشرة": u"Live radios",

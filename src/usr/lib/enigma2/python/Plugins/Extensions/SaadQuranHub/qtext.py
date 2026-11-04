@@ -259,8 +259,8 @@ def word_width(word, px):
     global _JL, _JR
     a = atlas(px)
     tab = _adv_table(a)
-    if _WW_SAVED[0] is None:
-        _load_widths()
+    if _WW_SAVED[0] is None and WW_FILE is None:
+        _WW_SAVED[0] = 0                 # no disk: nothing to read (with one, the disk thread reads it)
     memo = _WW.get(a["px"])
     if memo is None:
         memo = _WW[a["px"]] = {}
@@ -354,22 +354,29 @@ def _load_widths():
 
 
 def save_widths(force=False):
-    """Write the measured widths when enough new words were met (a few times a day at most)."""
+    """Write the measured widths when enough new words were met (on the disk thread when there is one)."""
     if not WW_FILE:
         return False
     n = sum(len(d) for d in _WW.values())
     if not force and n - (_WW_SAVED[0] or 0) < 2000:
         return False
-    try:
+    small = dict((px_, dict(list(m.items())[-40000:])) for px_, m in _WW.items())
+    _WW_SAVED[0] = n
+    path = WW_FILE
+
+    def write():
         import marshal
-        d = os.path.dirname(WW_FILE)
+        d = os.path.dirname(path)
         if d and not os.path.isdir(d):
             os.makedirs(d)
-        small = dict((px_, dict(list(m.items())[-40000:])) for px_, m in _WW.items())
-        with open(WW_FILE + ".tmp", "wb") as f:
+        with open(path + ".tmp", "wb") as f:
             marshal.dump(small, f)
-        os.rename(WW_FILE + ".tmp", WW_FILE)
-        _WW_SAVED[0] = n
+        os.rename(path + ".tmp", path)
+    if BG[0] is not None:
+        BG[0](write)
+        return True
+    try:
+        write()
         return True
     except Exception:
         return False
@@ -480,66 +487,90 @@ def png_bytes(w, h, alpha, color, cbuf=None, pal=None):
             chunk(b"IDAT", zlib.compress(raw, 1)) + chunk(b"IEND", b""))
 
 
+DISK_DIR = [None]                        # second, big tier on the HDD/USB (kept across restarts)
+AWAKE = [lambda: False]                  # set by the plugin: is the disk spinning right now?
+BG = [None]                              # set by the plugin: run a job on the disk thread
+RAM_KEEP = 400                           # /tmp keeps only the lines in use (a few MB)
+
+
 def render(text, px, color=0xffffff, height=None, colors=None, justify=None):
-    """-> (png path, width, height); cached in /tmp so a page turned back is instant."""
+    """-> (png path, width, height).  Two tiers: the lines in use in /tmp (instant, never waits for the
+    disk), every line ever drawn on the HDD/USB, read only while the disk is spinning anyway."""
     ck = u",".join(u"%d:%x" % kv for kv in sorted(colors.items())) if colors else u""
     key = hashlib.md5((u"%s|%d|%x|%s|%s|%s" % (text, px, color, height, ck, justify)).encode("utf-8")).hexdigest()
-    path = os.path.join(CACHE_DIR, key + ".png")
+    name = key + ".png"
+    path = os.path.join(CACHE_DIR, name)
     meta = _META.get(path)
     if meta and os.path.exists(path):
         return path, meta[0], meta[1]
-    if meta is None:                     # drawn in an earlier session: the disk keeps it across restarts
+    dd = DISK_DIR[0]
+    if dd and AWAKE[0]():                # drawn in an earlier session: take it from the disk
+        dp = os.path.join(dd, name)
         try:
-            with open(path, "rb") as f:
+            with open(dp, "rb") as f:
                 hd = f.read(24)
             if hd[12:16] == b"IHDR":
                 w, h = struct.unpack(">II", hd[16:24])
-                _META[path] = (w, h)
-                return path, w, h
+                return dp, w, h
         except Exception:
             pass
     w, h, alpha, cbuf, pal = compose(text, px, height, colors, justify)
     if not os.path.isdir(CACHE_DIR):
         os.makedirs(CACHE_DIR)
+    raw = png_bytes(w, h, alpha, color, cbuf, pal)
     tmp = path + ".tmp"
     with open(tmp, "wb") as f:
-        f.write(png_bytes(w, h, alpha, color, cbuf, pal))
+        f.write(raw)
     os.rename(tmp, path)
     _META[path] = (w, h)
+    if dd and BG[0] is not None:
+        BG[0](lambda: _to_disk(dd, name, raw))
     _trim_cache()
     return path, w, h
 
 
+def _to_disk(dd, name, raw):
+    """(disk thread) keep a copy of a drawn line on the HDD/USB."""
+    dp = os.path.join(dd, name)
+    if os.path.exists(dp):
+        return
+    with open(dp + ".tmp", "wb") as f:
+        f.write(raw)
+    os.rename(dp + ".tmp", dp)
+    _COUNT[0] += 1
+    if _COUNT[0] % 500 == 0:
+        _trim_disk(dd, KEEP[0])
+
+
 _META = {}
+_COUNT = [0]
+KEEP = [6000]
 
 
-KEEP = [600]
+def _trim_disk(d, keep):
+    try:
+        fs = os.listdir(d)
+        if len(fs) > keep + 500:
+            fs = sorted((os.path.getmtime(os.path.join(d, f)), f) for f in fs)
+            for _t, f in fs[:-keep]:
+                os.remove(os.path.join(d, f))
+    except Exception:
+        pass
 
 
-def set_cache(d, keep=6000):
-    """Keep the drawn lines on the HDD/USB (not in RAM), and many more of them."""
+def set_cache(d, keep=6000, ram="/tmp/sqh_text"):
+    """The HDD/USB keeps every drawn line; /tmp keeps the few hundred in use."""
     global CACHE_DIR
-    CACHE_DIR = d
+    CACHE_DIR = ram
+    DISK_DIR[0] = d
     KEEP[0] = keep
-    import threading
-
-    def trim():
-        try:
-            fs = os.listdir(d)
-            if len(fs) > keep + 500:
-                fs = sorted((os.path.getmtime(os.path.join(d, f)), f) for f in fs)
-                for _t, f in fs[:-keep]:
-                    os.remove(os.path.join(d, f))
-        except Exception:
-            pass
-    t = threading.Thread(target=trim)
-    t.daemon = True
-    t.start()
+    if BG[0] is not None:
+        BG[0](lambda: _trim_disk(d, keep))
 
 
 def _trim_cache(keep=None):
-    keep = keep or KEEP[0]
-    if len(_META) < keep + 200:
+    keep = keep or RAM_KEEP
+    if len(_META) < keep + 100:
         return
     try:
         fs = sorted((os.path.getmtime(os.path.join(CACHE_DIR, f)), f) for f in os.listdir(CACHE_DIR))

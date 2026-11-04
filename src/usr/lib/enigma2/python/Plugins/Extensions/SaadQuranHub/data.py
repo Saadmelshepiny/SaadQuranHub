@@ -772,30 +772,171 @@ def record_dir(bases=None, require_mount=True):
 
 
 # ----------------------------------------------------------------- everything of the plugin on the disk (1.9)
-_HOME = [None, 0.0]
+_HOME = [None, 0.0, False]          # path, looked up at, resolved once
+_MADE = set()
+NET_FS = ("nfs", "nfs4", "cifs", "smbfs", "smb3", "fuse.sshfs", "autofs", "davfs", "fuse.davfs2")
+
+
+def local_bases():
+    """HDD / USB / SD folders only: a network share can hang for seconds when the server is away."""
+    net = set()
+    try:
+        with open("/proc/mounts") as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) > 2 and parts[2] in NET_FS:
+                    net.add(parts[1])
+    except Exception:
+        pass
+    out = []
+    for b in REC_BASES + sorted(glob.glob("/media/*")):
+        if b in out or b in net or b in ("/media/net", "/media/autofs", "/media/upnp"):
+            continue
+        out.append(b)
+    return out
+
+
+def _resolve_home():
+    try:
+        d = record_dir(local_bases())
+    except Exception:
+        d = None
+    if d != _HOME[0]:
+        _MADE.clear()
+        _DEV[0] = None
+    _HOME[0] = d
+    _HOME[2] = True
+
+
+def home_reset():
+    _HOME[:] = [None, 0.0, False]
+    _MADE.clear()
+    _DEV[0] = None
 
 
 def home_dir(sub=""):
-    """<HDD/USB>/QuranHub[/sub] (looked up at most once a minute), or None when no disk is attached.
-    Caches, logs, temporary files and a copy of the settings live here, never in RAM (/tmp) or flash."""
+    """<HDD/USB>/QuranHub[/sub], or None when no disk is attached.
+    Never waits for the disk on the screen's thread: after the first look-up the disk is looked for
+    again in the background (once a minute), and each sub-folder is created only once."""
     now = time.time()
-    if now - _HOME[1] > 60 or (_HOME[0] and not os.path.isdir(_HOME[0])):
-        try:
-            _HOME[0] = record_dir()
-        except Exception:
-            _HOME[0] = None
+    if not _HOME[2]:
         _HOME[1] = now
+        _resolve_home()
+    elif now - _HOME[1] > 60:
+        _HOME[1] = now
+        DISK.put(_resolve_home)
     d = _HOME[0]
     if not d:
         return None
     if sub:
         d = os.path.join(d, sub)
-        try:
-            if not os.path.isdir(d):
-                os.makedirs(d)
-        except OSError:
-            return None
+        if d not in _MADE:
+            try:
+                if not os.path.isdir(d):
+                    os.makedirs(d)
+                _MADE.add(d)
+            except OSError:
+                return None
     return d
+
+
+# -- is the disk spinning?  (/proc/diskstats is in RAM: reading it never wakes the disk) ---------------
+_DEV = [None]
+_IO = {"sig": None, "t": 0.0}
+
+
+def _disk_dev():
+    if _DEV[0] is None and _HOME[0]:
+        try:
+            st = os.stat(_HOME[0])
+            _DEV[0] = (os.major(st.st_dev), os.minor(st.st_dev))
+        except Exception:
+            _DEV[0] = False
+    return _DEV[0]
+
+
+def standby_secs():
+    """The receiver's own 'HDD standby' setting (0 = never sleeps)."""
+    try:
+        from Components.config import config
+        return int(config.usage.hdd_standby.value)
+    except Exception:
+        return 300
+
+
+def disk_awake(now=None):
+    """True when the disk worked recently (so reading it now costs nothing).  Unknown = asleep."""
+    if not _HOME[0]:
+        return False
+    sb = standby_secs()
+    if sb <= 0:
+        return True
+    dev = _disk_dev()
+    if not dev:
+        return False
+    now = now or time.time()
+    try:
+        with open("/proc/diskstats") as f:
+            for line in f:
+                x = line.split()
+                if len(x) > 9 and int(x[0]) == dev[0] and int(x[1]) == dev[1]:
+                    sig = (x[3], x[7])               # reads / writes completed
+                    if sig != _IO["sig"]:
+                        if _IO["sig"] is not None:
+                            _IO["t"] = now
+                        _IO["sig"] = sig
+                    break
+    except Exception:
+        return False
+    return now - _IO["t"] < max(30, sb - 30)
+
+
+class _DiskThread(object):
+    """Everything that touches the disk without hurry runs here, never on the screen's thread."""
+
+    def __init__(self):
+        self.q = []
+        self.lock = threading.Lock()
+        self.ev = threading.Event()
+        self.thread = None
+        self.busy = False
+
+    def put(self, fn):
+        with self.lock:
+            self.q.append(fn)
+        if self.thread is None or not self.thread.is_alive():
+            self.thread = threading.Thread(target=self.run, name="sqh-disk")
+            self.thread.daemon = True
+            self.thread.start()
+        self.ev.set()
+
+    def run(self):
+        while True:
+            self.ev.wait(5)
+            self.ev.clear()
+            while True:
+                with self.lock:
+                    if not self.q:
+                        break
+                    fn = self.q.pop(0)
+                    self.busy = True
+                try:
+                    fn()
+                except Exception:
+                    pass
+                self.busy = False
+
+    def idle(self, timeout=5):
+        t0 = time.time()
+        while time.time() - t0 < timeout:
+            with self.lock:
+                if not self.q and not self.busy:
+                    return True
+            time.sleep(0.02)
+        return False
+
+
+DISK = _DiskThread()
 
 
 def tmp_path(name):

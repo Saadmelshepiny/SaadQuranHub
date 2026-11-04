@@ -1,6 +1,6 @@
 {
-  "version": "1.3",
-  "ipk": "https://raw.githubusercontent.com/Saadmelshepiny/SaadQuranHub/main/ipk/enigma2-plugin-extensions-saadquranhub_1.3_all.ipk",
-  "sha256": "ec9f129eb154d3717af2102c616f462e72d84411b9fe0f6892cca38428e7effb",
-  "notes": "تحديث آمن مع رجوع تلقائي • التلاوة تكمل بعد انقطاع الكهرباء • ما تسمعه يعمل بدون إنترنت • المصحف مرسوم مسبقاً • إذاعتي كقناة • DLNA • ملف لكل فرد • نجوم وحصاد"
+  "version": "1.3.1",
+  "ipk": "https://raw.githubusercontent.com/Saadmelshepiny/SaadQuranHub/main/ipk/enigma2-plugin-extensions-saadquranhub_1.3.1_all.ipk",
+  "sha256": "10233049f651cdde4792f0d9e8082f6e81deeab02f81a9e6e011cdfff6eca6f2",
+  "notes": "لا توقف لحظي: البلاجين لا ينتظر القرص النائم أبداً، وكل الكتابة على القرص في الخلفية"
 }

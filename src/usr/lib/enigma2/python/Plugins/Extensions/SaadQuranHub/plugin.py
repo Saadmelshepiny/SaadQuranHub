@@ -62,7 +62,7 @@ from . import hddcache
 from . import dlna
 from . import safeupdate
 
-PLUGIN_VERSION = "1.3"
+PLUGIN_VERSION = "1.3.1"
 GITHUB_REPO = "Saadmelshepiny/SaadQuranHub"
 GITHUB_INFO = "https://raw.githubusercontent.com/%s/main/version.json" % GITHUB_REPO
 
@@ -206,11 +206,15 @@ TV_SIZES = [(u"كامل", 0.0, 0.0, 1.0, 1.0), (u"كبير", 0.1, 0.1, 0.8, 0.8)
 
 LOG_PATH = "/tmp/quranhub.log"          # without a disk; with one: <disk>/QuranHub/logs/quranhub.log
 _LOG = ["", 0.0]
+_LOGBUF = []                              # 2.0.1: lines wait in memory, the disk thread writes them
+_ERRBUF = []
+_LOGT = [time.time()]
 
 
 def log_path():
+    """(disk thread) where the log goes."""
     now = time.time()
-    if now - _LOG[1] > 60:
+    if now - _LOG[1] > 60 or not _LOG[0]:
         _LOG[1] = now
         try:
             d = data.home_dir("logs")
@@ -229,18 +233,45 @@ def log_path():
     return _LOG[0]
 
 
-def qlog(msg):
-    """Tiny event log (/tmp/quranhub.log) to understand 'sometimes it works'."""
-    try:
-        import os
+def _append(path, lines, limit):
+    if os.path.exists(path) and os.path.getsize(path) > limit:
+        try:
+            os.rename(path, path + ".1")          # keep the previous log too
+        except Exception:
+            os.remove(path)
+    with open(path, "ab") as f:
+        f.write(u"".join(lines).encode("utf-8", "ignore"))
+
+
+def flush_log():
+    """(disk thread) write what waits in memory."""
+    lines, _LOGBUF[:] = list(_LOGBUF), []
+    errs, _ERRBUF[:] = list(_ERRBUF), []
+    _LOGT[0] = time.time()
+    if lines:
         lp = log_path()
-        if os.path.exists(lp) and os.path.getsize(lp) > (400000 if lp != LOG_PATH else 100000):
-            try:
-                os.rename(lp, lp + ".1")          # keep the previous log too (on the disk)
-            except Exception:
-                os.remove(lp)
-        with open(lp, "ab") as f:
-            f.write((u"%s %s\n" % (time.strftime("%H:%M:%S"), msg)).encode("utf-8"))
+        _append(lp, lines, 400000 if lp != LOG_PATH else 100000)
+    if errs and data.home_dir():
+        _append(os.path.join(data.home_dir("logs"), "errors.log"), errs, 300000)
+
+
+def log_due():
+    """Write when the disk is spinning anyway, or when much is waiting (never wakes it just for a line)."""
+    if not _LOGBUF and not _ERRBUF:
+        return False
+    if not data.home_dir():
+        return True                           # no disk: /tmp, nothing to wait for
+    return data.disk_awake() or len(_LOGBUF) > 400 or time.time() - _LOGT[0] > 1800
+
+
+def qlog(msg):
+    """Event log: <disk>/QuranHub/logs/quranhub.log (also reachable as /tmp/quranhub.log).
+    Nothing here touches the disk: the lines are handed to the disk thread."""
+    try:
+        _LOGBUF.append(u"%s %s\n" % (time.strftime("%H:%M:%S"), msg))
+        del _LOGBUF[:-1000]
+        if log_due():
+            data.DISK.put(flush_log)
     except Exception:
         pass
     try:
@@ -249,14 +280,11 @@ def qlog(msg):
         pass
     try:                                         # 2.0: inside an except block -> the full traceback
         import sys as _sys
-        if _sys.exc_info()[0] is not None and data.home_dir():
+        if _sys.exc_info()[0] is not None:
             import traceback
-            ep = os.path.join(data.home_dir("logs"), "errors.log")
-            if os.path.exists(ep) and os.path.getsize(ep) > 300000:
-                os.rename(ep, ep + ".1")
-            with open(ep, "ab") as f:
-                f.write((u"==== %s %s (%s)\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), msg, PLUGIN_VERSION)).encode("utf-8"))
-                f.write(traceback.format_exc().encode("utf-8", "ignore"))
+            _ERRBUF.append(u"==== %s %s (%s)\n%s" % (time.strftime("%Y-%m-%d %H:%M:%S"), msg, PLUGIN_VERSION,
+                                                    traceback.format_exc()))
+            del _ERRBUF[:-50]
     except Exception:
         pass
 
@@ -1940,8 +1968,11 @@ class Hub17Bg(object):
 
 
 
-BUILD = 20             # one number for both editions (the "what's new" screen and the changelog)
+BUILD = 21             # one number for both editions (the "what's new" screen and the changelog)
 CHANGELOG = [
+    (21, [u"لا توقف لحظي بعد الآن: البلاجين لا ينتظر القرص النائم أبداً - كل الكتابة على القرص في الخلفية",
+          u"الأسطر المرسومة المستعملة الآن في الذاكرة (بضعة ميجا)، وكل ما رُسم سابقاً على القرص",
+          u"لا يُستعمل مجلد الشبكة (/media/net) لملفات البلاجين، ورسم المصحف المسبق في وضع الانتظار فقط"]),
     (20, [u"تحديث آمن: فحص الحزمة قبل التثبيت، والرجوع للإصدار السابق تلقائياً إذا لم يعمل الجديد",
           u"مكان التلاوة يُحفظ كل 10 ثوانٍ، والمتابعة بعد انقطاع الكهرباء (اختياري)",
           u"ما تسمعه يُحفظ على القرص ويعمل بدون إنترنت، والسورة التالية تُجهّز أثناء الاستماع",
@@ -2217,7 +2248,13 @@ class Hub18Bg(object):
         return items, [g[0] for g in groups]
 
     def station_play(self, rec=None, shuffle=True):
-        items, _recs = self.station_items(rec, shuffle)
+        """The folders are read on a worker thread (a sleeping disk never freezes the screen)."""
+        self.set_status(u"📻 جاري تجهيز إذاعتي الخاصة ...")
+        Runner().run(lambda: self.station_items(rec, shuffle)[0],
+                     lambda r: self._station_go(r if isinstance(r, list) else [], shuffle),
+                     lambda e: self._station_go([], shuffle))
+
+    def _station_go(self, items, shuffle):
         if not items:
             return self.set_status(u"المكتبة فارغة - نزّل قارئاً أو أضف مجلداً من القرص", notify=True)
         self.ctx = None
@@ -2290,10 +2327,14 @@ class Hub19Bg(object):
             AUDIO.quota = int(float(self.cfg.get("audio_quota", 20)) * 1024 ** 3)
         except Exception:
             pass
-        st = self.state_load()
-        if st and st.get("url") and st.get("ts", 0) > self.cfg.get("resume_ts", 0):
-            self.cfg["resume"] = dict((k, st[k]) for k in ("title", "url", "pos", "ctx") if k in st)
-            self.cfg["resume_ts"] = st["ts"]
+        data.DISK.put(AUDIO.preload)
+
+        def journal():
+            st = self.state_load()
+            if st and st.get("url") and st.get("ts", 0) > self.cfg.get("resume_ts", 0):
+                self.cfg["resume"] = dict((k, st[k]) for k in ("title", "url", "pos", "ctx") if k in st)
+                self.cfg["resume_ts"] = st["ts"]
+        data.DISK.put(journal)
 
     # -- the URL that is really played: a kept copy when there is one ------------------------------
     def cache_swap(self, url, title=u"", live=False):
@@ -2345,18 +2386,20 @@ class Hub19Bg(object):
         if not p:
             return
         playing = bool(Player.active and self.cur_url and not self.cur_live and self.adhan_prev is None)
-        if playing and now - self.j19 >= 10:
+        every = 10 if data.disk_awake(now) else 300        # a sleeping disk is woken at most every 5 min
+        if playing and now - self.j19 >= every:
             self.j19 = now
             pp = self.play_pos()
             st = {"title": Player.cur_title, "url": self.real_url(self.cur_url), "pos": int(pp[0]) if pp else 0,
                   "ctx": self.ctx or {}, "playing": True, "ts": int(now)}
-            _write_small(p, st)
+            self.jlast = st
+            data.DISK.put(lambda: _write_small(p, st))
             self.jplaying = True
         elif not Player.active and self.jplaying:
             self.jplaying = False
-            st = self.state_load() or {}
+            st = dict(getattr(self, "jlast", None) or {})
             st.update({"playing": False, "ts": int(now)})
-            _write_small(p, st)
+            data.DISK.put(lambda: _write_small(p, st))
 
     def boot_resume(self):
         """After a power cut / restart: continue what was playing (only when switched on)."""
@@ -2413,7 +2456,9 @@ class Hub19Bg(object):
             if lt.tm_hour >= 9 and once("disk19"):
                 self.disk_watch()
             if lt.tm_hour in (2, 3, 4, 5, 13, 14) and not Player.active and once("rot19"):
-                self.backup_rotate()
+                data.DISK.put(self.backup_rotate)
+            if log_due():
+                data.DISK.put(flush_log)
             if lt.tm_mday == 1 and lt.tm_hour >= 10 and once("harvest19"):
                 prev = now - 2 * 86400
                 txt = studio.harvest_text(self.cfg, "month", prev)
@@ -2588,7 +2633,7 @@ class Hub19Bg(object):
             from Screens.Standby import inStandby
         except Exception:
             inStandby = None
-        if not (inStandby or (lt.tm_hour in (1, 2, 3, 4, 5) and self.ui is None)):
+        if not inStandby:                     # 2.0.1: only while the box sleeps (never while you watch)
             return
         if st.get("sig") != self.mpre_sig():
             st = {"sig": self.mpre_sig(), "page": 0}
@@ -2606,7 +2651,7 @@ class Hub19Bg(object):
         except Exception:
             inStandby = None
         lt = time.localtime()
-        if not (inStandby or (lt.tm_hour in (1, 2, 3, 4, 5) and self.ui is None)) or self.cfg.get("mpre", {}).get("sig") != self.mpre_sig():
+        if not inStandby or self.cfg.get("mpre", {}).get("sig") != self.mpre_sig():
             m["timer"].stop()
             self.mpre = None
             return
@@ -4102,6 +4147,9 @@ class Background(Hub16Bg, Hub17Bg, Hub18Bg, Hub19Bg):
             d = data.record_dir()
             if d:
                 qtext.WW_FILE = os.path.join(d, ".saadquranhub_widths.bin")
+                qtext.BG[0] = data.DISK.put           # 2.0.1: the screen never waits for the disk
+                qtext.AWAKE[0] = data.disk_awake
+                data.DISK.put(qtext._load_widths)
                 tc = data.home_dir("cache/text")
                 if tc:
                     qtext.set_cache(tc)               # drawn Quran lines: on the disk, kept across restarts
@@ -7542,7 +7590,7 @@ class QuranHub(Screen):
                     ks += ["dsk:" + d["path"] for d in BG.cfg.get("disk_srcs", [])]
                 elif k == "@acache":                 # shown once something has been kept
                     try:
-                        if AUDIO.entries():
+                        if AUDIO.has_entries():
                             ks.append("acache")
                     except Exception:
                         pass
@@ -8092,10 +8140,11 @@ class QuranHub(Screen):
         self._menu(u"إذاعتي الخاصة", it)
 
     def station_one(self):
-        _items, recs = BG.station_items(None, False)
-        if not recs:
-            return self.qh_status_text(u"المكتبة فارغة")
-        self._choice(u"اختر القارئ", [(r, r) for r in recs], lambda c: c and BG.station_play(c[1], False))
+        def go(recs):
+            if isinstance(recs, Exception) or not recs:
+                return self.qh_status_text(u"المكتبة فارغة")
+            self._choice(u"اختر القارئ", [(r, r) for r in recs], lambda c: c and BG.station_play(c[1], False))
+        Runner().run(lambda: BG.station_items(None, False)[1], go, go)
 
     def station_link(self):
         url = BG.station_url()
@@ -8116,7 +8165,7 @@ class QuranHub(Screen):
               (u"الحد الأقصى لما سمعته سابقاً: %s جيجا (المستخدم %s)" % (
                   cfg.get("audio_quota", 20), data.fmt_bytes(AUDIO.total())), self.acache_quota),
               (u"مسح ما سمعته سابقاً من القرص", self.acache_clear),
-              (u"رسم المصحف كاملاً مسبقاً (أثناء الانتظار أو ليلاً): %s  (%d/604)" % (
+              (u"رسم المصحف كاملاً مسبقاً (أثناء وضع الانتظار): %s  (%d/604)" % (
                   self._on(cfg.get("mushaf_pre", True)), int((cfg.get("mpre") or {}).get("page", 0))),
                lambda: BG.toggle_flag("mushaf_pre", True, u"رسم المصحف مسبقاً")),
               (u"إيقاظ القرص قبل الأذان والمواعيد: %s" % self._on(cfg.get("hdd_wake", True)),
