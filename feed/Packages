@@ -1,5 +1,5 @@
 Package: enigma2-plugin-extensions-saadquranhub
-Version: 1.3.1
+Version: 1.3.2
 Architecture: all
 Maintainer: Saad
 Section: extra
@@ -7,9 +7,9 @@ Priority: optional
 Replaces: enigma2-plugin-extensions-quranhub
 Conflicts: enigma2-plugin-extensions-quranhub
 Provides: enigma2-plugin-extensions-quranhub
-Description: Saad Quran Hub 1.3.1 - Quran reciters and radios with the TV picture (zap freely while the Quran plays), reader and tafsir with verse highlighting, memorisation studio, khatma, adhkar, Telegram channels, phone app
-Filename: enigma2-plugin-extensions-saadquranhub_1.3.1_all.ipk
-Size: 7462074
-MD5Sum: 779b167392b09afcc370f54d9948d124
-SHA256sum: 10233049f651cdde4792f0d9e8082f6e81deeab02f81a9e6e011cdfff6eca6f2
+Description: Saad Quran Hub 1.3.2 - Quran reciters and radios with the TV picture (zap freely while the Quran plays), reader and tafsir with verse highlighting, memorisation studio, khatma, adhkar, Telegram channels, phone app
+Filename: enigma2-plugin-extensions-saadquranhub_1.3.2_all.ipk
+Size: 7462050
+MD5Sum: 9521f3e36fa85625842d3b8c3d383c59
+SHA256sum: 800c281ab3877df80284dbdc895ea77866e749527764bbd48838c8a0f3a6ada5
 

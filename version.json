@@ -1,6 +1,6 @@
 {
-  "version": "1.3.1",
-  "ipk": "https://raw.githubusercontent.com/Saadmelshepiny/SaadQuranHub/main/ipk/enigma2-plugin-extensions-saadquranhub_1.3.1_all.ipk",
-  "sha256": "10233049f651cdde4792f0d9e8082f6e81deeab02f81a9e6e011cdfff6eca6f2",
-  "notes": "لا توقف لحظي: البلاجين لا ينتظر القرص النائم أبداً، وكل الكتابة على القرص في الخلفية"
+  "version": "1.3.2",
+  "ipk": "https://raw.githubusercontent.com/Saadmelshepiny/SaadQuranHub/main/ipk/enigma2-plugin-extensions-saadquranhub_1.3.2_all.ipk",
+  "sha256": "800c281ab3877df80284dbdc895ea77866e749527764bbd48838c8a0f3a6ada5",
+  "notes": "زر MENU يعمل على OpenATV 8 وما بعده"
 }

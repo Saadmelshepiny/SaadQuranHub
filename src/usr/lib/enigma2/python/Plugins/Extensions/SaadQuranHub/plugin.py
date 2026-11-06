@@ -27,7 +27,28 @@ except ImportError:  # python2
 from Plugins.Plugin import PluginDescriptor
 from Screens.Screen import Screen
 from Screens.VirtualKeyBoard import VirtualKeyBoard
-from Components.ActionMap import ActionMap
+from Components.ActionMap import ActionMap as _ActionMap
+
+_MENU_T = [0.0]
+
+
+def ActionMap(contexts, actions, prio=0):
+    """The MENU key on every image.  OpenBH / OpenPLi send "mainMenu" (InfobarMenuActions); OpenATV 7.4+
+    and 8 removed that context and send "menu" (MenuActions).  Both are bound; when an image has both,
+    one press still runs the action once."""
+    if "InfobarMenuActions" in contexts and "mainMenu" in actions:
+        fn = actions["mainMenu"]
+
+        def once(*a):
+            now = time.time()
+            if now - _MENU_T[0] < 0.4:
+                return None
+            _MENU_T[0] = now
+            return fn(*a)
+        contexts = list(contexts) + ["MenuActions"]
+        actions = dict(actions)
+        actions["mainMenu"] = actions["menu"] = once
+    return _ActionMap(contexts, actions, prio)
 from Components.Label import Label
 from Components.MenuList import MenuList
 from Components.MultiContent import MultiContentEntryText
@@ -62,7 +83,7 @@ from . import hddcache
 from . import dlna
 from . import safeupdate
 
-PLUGIN_VERSION = "1.3.1"
+PLUGIN_VERSION = "1.3.2"
 GITHUB_REPO = "Saadmelshepiny/SaadQuranHub"
 GITHUB_INFO = "https://raw.githubusercontent.com/%s/main/version.json" % GITHUB_REPO
 
@@ -1968,8 +1989,9 @@ class Hub17Bg(object):
 
 
 
-BUILD = 21             # one number for both editions (the "what's new" screen and the changelog)
+BUILD = 22             # one number for both editions (the "what's new" screen and the changelog)
 CHANGELOG = [
+    (22, [u"زر MENU يعمل على OpenATV 8 وما بعده (وما زال يعمل على OpenBH و OpenPLi)"]),
     (21, [u"لا توقف لحظي بعد الآن: البلاجين لا ينتظر القرص النائم أبداً - كل الكتابة على القرص في الخلفية",
           u"الأسطر المرسومة المستعملة الآن في الذاكرة (بضعة ميجا)، وكل ما رُسم سابقاً على القرص",
           u"لا يُستعمل مجلد الشبكة (/media/net) لملفات البلاجين، ورسم المصحف المسبق في وضع الانتظار فقط"]),
