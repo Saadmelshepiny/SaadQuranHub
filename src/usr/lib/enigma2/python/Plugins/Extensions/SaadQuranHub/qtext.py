@@ -171,17 +171,31 @@ def visual(toks):
 
 
 # ------------------------------------------------------------------ the pictures (atlas)
+EXTRA_DIRS = []                    # 2.1: packs on the HDD/USB (big and 4K letter pictures)
+_PATHS = {}
+
+
+def add_atlas_dir(d):
+    global _SIZES
+    if d and d not in EXTRA_DIRS:
+        EXTRA_DIRS.append(d)
+        _SIZES = None
+
+
 def sizes():
     global _SIZES
     if _SIZES is None:
-        s = []
-        try:
-            for f in os.listdir(ATLAS_DIR):
-                if f.startswith("atlas") and f.endswith(".bin"):
-                    s.append(int(f[5:-4]))
-        except Exception:
-            pass
-        _SIZES = sorted(s)
+        found = {}
+        for d in [ATLAS_DIR] + EXTRA_DIRS:
+            try:
+                for f in os.listdir(d):
+                    if f.startswith("atlas") and f.endswith(".bin") and int(f[5:-4]) not in found:
+                        found[int(f[5:-4])] = os.path.join(d, f)
+            except Exception:
+                pass
+        _PATHS.clear()
+        _PATHS.update(found)
+        _SIZES = sorted(found)
     return _SIZES
 
 
@@ -196,9 +210,13 @@ def atlas(px):
         raise IOError("no text atlas")
     fit = [s for s in ss if s <= px]
     best = fit[-1] if fit else ss[0]
+    if best not in _ATLAS and not _PATHS.get(best, ATLAS_DIR).startswith(ATLAS_DIR) and not AWAKE[0]():
+        own = [s for s in fit if _PATHS.get(s, "").startswith(ATLAS_DIR)]   # a pack on a sleeping disk:
+        if own:                                                             # the nearest built-in size
+            best = own[-1]
     a = _ATLAS.get(best)
     if a is None:
-        raw = zlib.decompress(open(os.path.join(ATLAS_DIR, "atlas%d.bin" % best), "rb").read())
+        raw = zlib.decompress(open(_PATHS.get(best) or os.path.join(ATLAS_DIR, "atlas%d.bin" % best), "rb").read())
         cut = raw.index(b"\0")
         head = json.loads(raw[:cut].decode("utf-8"))
         a = {"g": head["g"], "asc": head["asc"], "desc": head["desc"], "space": head["space"],

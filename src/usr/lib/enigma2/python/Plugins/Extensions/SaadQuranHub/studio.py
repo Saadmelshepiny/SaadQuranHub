@@ -930,3 +930,111 @@ def harvest_text(cfg, period="month", ts=None):
     if h["top"]:
         lines += [u"", u"أكثر القراء استماعاً (الإجمالي):"] + [u"%d. %s" % (i, n) for i, (n, _s) in enumerate(h["top"], 1)]
     return u"\n".join(lines)
+
+
+# ------------------------------------------------------------------ 2.1: juz of an ayah, translation & tafsir audio
+def juz_of(n, a=1):
+    k = _key(n, a)
+    j = 1
+    for i, (s, v) in enumerate(extras.JUZ_START):
+        if _key(s, v) <= k:
+            j = i + 1
+    return j
+
+
+# label, alquran.cloud audio edition (ayah by ayah)
+TRANSLATION_AUDIO = [
+    (u"English - Ibrahim Walk (Saheeh International)", "en.walk"),
+    (u"اردو - شمشاد علی خان", "ur.khan"),
+    (u"Français - Youssouf Leclerc", "fr.leclerc"),
+]
+ALQ_SURAH = "https://api.alquran.cloud/v1/surah/%d/%s"
+
+
+def translation_audio_urls(n, edition):
+    """-> {ayah: audio url} of a translation, read from alquran.cloud (kept on the disk for good)."""
+    d = data.cached_json(ALQ_SURAH % (n, edition), "timing_tr_%s_%d.json" % (edition, n))
+    out = {}
+    for x in ((d or {}).get("data") or {}).get("ayahs") or []:
+        u = x.get("audio") or (x.get("audioSecondary") or [None])[0]
+        if u:
+            out[int(x.get("numberInSurah"))] = u
+    if not out:
+        raise IOError(u"لا توجد ترجمة صوتية لهذه السورة")
+    return out
+
+
+def translation_items(n, rec, edition, a1=1, a2=None):
+    """Arabic ayah, then its translation, for every ayah (rec = HIFZ_RECITERS index)."""
+    tr = translation_audio_urls(n, edition)
+    a2 = a2 or ayah_counts()[n - 1]
+    lab = dict((e, l) for l, e in TRANSLATION_AUDIO).get(edition, edition)
+    items = []
+    for a in range(a1, a2 + 1):
+        items.append({"title": u"%s - سورة %s آية %d" % (HIFZ_RECITERS[rec][0], data.surah_name(n), a),
+                      "url": ayah_url(n, a, rec), "autonext": True, "nohist": True, "ayah": [n, a]})
+        if a in tr:
+            items.append({"title": u"%s - %d" % (lab, a), "url": tr[a], "autonext": True, "nohist": True,
+                          "ayah": [n, a]})
+    if items:
+        items[-1]["stop_at_end"] = True
+    return items
+
+
+TAFSIR_AUDIO_API = ["https://mp3quran.net/api/v3/tafsir?tafsir=1&language=ar",
+                    "https://www.mp3quran.net/api/v3/tafsir?tafsir=1&language=ar"]
+
+
+def _walk_urls(x, out):
+    if isinstance(x, dict):
+        u = x.get("url")
+        s = x.get("sura_id") or x.get("surah_id") or x.get("sura")
+        if u and s and str(u).startswith("http"):
+            out.append((int(s), x.get("name") or u"", u))
+        for v in x.values():
+            _walk_urls(v, out)
+    elif isinstance(x, list):
+        for v in x:
+            _walk_urls(v, out)
+
+
+def tafsir_audio(n=None):
+    """-> [(surah, part name, url)] of the audio tafsir (al-Muyassar, mp3quran.net)."""
+    d = data.cached_json(TAFSIR_AUDIO_API, "tafsir_audio_1.json")
+    out = []
+    _walk_urls(d, out)
+    out.sort(key=lambda x: (x[0], x[2]))
+    if n:
+        out = [x for x in out if x[0] == int(n)]
+    if not out:
+        raise IOError(u"التفسير الصوتي غير متاح الآن")
+    return out
+
+
+# ------------------------------------------------------------------ 2.1: ready lists shared on GitHub
+LISTS_BASE = "https://raw.githubusercontent.com/Saadmelshepiny/SaadQuranHub/main/lists/"
+
+
+def shared_lists():
+    """-> [{"id", "name", "desc", "file", "count"}] (index of the developer's lists)."""
+    d = data.cached_json(LISTS_BASE + "index.json", "lists_index.json")
+    return [x for x in (d or {}).get("lists", []) if x.get("file")]
+
+
+def shared_list(entry):
+    """-> [play items] of one shared list.  An item is {"title", "url"} or {"title", "server", "n"}
+    (whole surah from an mp3quran folder) or {"title", "ea": everyayah folder, "n"} (ayah by ayah)."""
+    d = data.cached_json(LISTS_BASE + entry["file"], "list_%s.json" % entry.get("id", "x"))
+    items = []
+    for x in (d or {}).get("items", []):
+        if x.get("url"):
+            items.append({"title": x.get("title") or x["url"], "url": x["url"], "autonext": True})
+        elif x.get("server") and x.get("n"):
+            items.append({"title": x.get("title") or data.surah_name(int(x["n"])),
+                          "url": "%s%03d.mp3" % (x["server"], int(x["n"])), "autonext": True})
+        elif x.get("ea") and x.get("n"):
+            n = int(x["n"])
+            for a in range(1, ayah_counts()[n - 1] + 1):
+                items.append({"title": u"%s - %d" % (x.get("title") or data.surah_name(n), a),
+                              "url": EVERYAYAH % (x["ea"], n, a), "autonext": True, "nohist": True, "ayah": [n, a]})
+    return items

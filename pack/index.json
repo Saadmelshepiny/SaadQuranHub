@@ -1,0 +1,17 @@
+{
+ "fonts-big": {
+  "file": "fonts-big.tar.gz",
+  "size": 2244191,
+  "sha256": "5174d6f28d091d07e72f59ec48e1e9d1d2699c9f81b67f1625ea9bb5fb393c3e"
+ },
+ "tafsir": {
+  "file": "tafsir.tar.gz",
+  "size": 3081926,
+  "sha256": "85f8ef23af9adc12bdebe4fa5a1f13925d8c9d199df06459b26d01909c934c0d"
+ },
+ "fonts-4k": {
+  "file": "fonts-4k.tar.gz",
+  "size": 2934644,
+  "sha256": "cfe504ef5f20404e6295cc5ed994b208844aaa42a2dc0bac10ee3389d5827c6d"
+ }
+}

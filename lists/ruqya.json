@@ -1,0 +1,30 @@
+{
+ "name": "آيات الرقية والحفظ",
+ "items": [
+  {
+   "title": "سورة الفاتحة",
+   "server": "https://server8.mp3quran.net/afs/",
+   "n": 1
+  },
+  {
+   "title": "سورة البقرة",
+   "server": "https://server8.mp3quran.net/afs/",
+   "n": 2
+  },
+  {
+   "title": "سورة الإخلاص",
+   "server": "https://server8.mp3quran.net/afs/",
+   "n": 112
+  },
+  {
+   "title": "سورة الفلق",
+   "server": "https://server8.mp3quran.net/afs/",
+   "n": 113
+  },
+  {
+   "title": "سورة الناس",
+   "server": "https://server8.mp3quran.net/afs/",
+   "n": 114
+  }
+ ]
+}

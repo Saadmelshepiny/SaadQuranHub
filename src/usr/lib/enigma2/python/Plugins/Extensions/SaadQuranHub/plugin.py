@@ -82,8 +82,10 @@ from . import i18n
 from . import hddcache
 from . import dlna
 from . import safeupdate
+from . import packs
+from . import house
 
-PLUGIN_VERSION = "1.3.2"
+PLUGIN_VERSION = "1.4"
 GITHUB_REPO = "Saadmelshepiny/SaadQuranHub"
 GITHUB_INFO = "https://raw.githubusercontent.com/%s/main/version.json" % GITHUB_REPO
 
@@ -1113,7 +1115,8 @@ class Hub16Bg(object):
                     self.set_status(u"تعذّر الوصول إلى GitHub: %s" % res, notify=True)
                 return
             self.cfg["gh_latest"] = {"version": res["version"], "ipk": res.get("ipk", u""), "notes": res.get("notes", u""),
-                                     "sha256": res.get("sha256", u"")}
+                                     "sha256": res.get("sha256", u""), "ipk_lite": res.get("ipk_lite", u""),
+                                     "sha256_lite": res.get("sha256_lite", u"")}
             self.save()
             if vtuple(res["version"]) > vtuple(PLUGIN_VERSION):
                 msg = u"⬆ يتوفر إصدار جديد من Saad Quran Hub: %s\nللتثبيت: MENU > أدوات وتشخيص > تحديث البلاجين" % res["version"]
@@ -1328,6 +1331,11 @@ class Hub16Bg(object):
             self.tick19()
         except Exception as e:
             qlog("tick19: %r" % (e,))
+        if self.house_q:
+            try:
+                self.house_tick()
+            except Exception as e:
+                qlog("house: %r" % (e,))
         if self.bot is None:
             return
         for u in self.bot.poll():
@@ -1989,8 +1997,15 @@ class Hub17Bg(object):
 
 
 
-BUILD = 22             # one number for both editions (the "what's new" screen and the changelog)
+BUILD = 23             # one number for both editions (the "what's new" screen and the changelog)
 CHANGELOG = [
+    (23, [u"معالج أول تشغيل (اللغة، المدينة، القارئ، القرص) وبحث داخل القوائم والإعدادات",
+          u"«الأكثر استخداماً» أعلى القائمة، وزر «الإبلاغ عن مشكلة» بكود QR",
+          u"الواجهة بالفرنسية والتركية والأردية أيضاً",
+          u"الآية ثم ترجمتها صوتياً، والتفسير الصوتي، وقوائم جاهزة من المطوّر",
+          u"المصحف على الجوال يتبع التلاوة على التلفاز",
+          u"أكثر من ريسيفر في البيت: تشغيل في كل الغرف معاً، أو أكمل هنا ما يعمل هناك",
+          u"حزمة خفيفة للأجهزة ذات الذاكرة الصغيرة، وحروف أوضح للشاشات الأكبر من 1080"]),
     (22, [u"زر MENU يعمل على OpenATV 8 وما بعده (وما زال يعمل على OpenBH و OpenPLi)"]),
     (21, [u"لا توقف لحظي بعد الآن: البلاجين لا ينتظر القرص النائم أبداً - كل الكتابة على القرص في الخلفية",
           u"الأسطر المرسومة المستعملة الآن في الذاكرة (بضعة ميجا)، وكل ما رُسم سابقاً على القرص",
@@ -2802,8 +2817,157 @@ def reload_bouquets():
     except Exception as e:
         qlog("bouquet reload: %r" % (e,))
 
+def box_info():
+    """Receiver model, image, Python, screen: for problem reports."""
+    out = {}
+    for key, paths in (("box", ("/proc/stb/info/vumodel", "/proc/stb/info/gbmodel", "/proc/stb/info/boxtype",
+                                "/proc/stb/info/model", "/etc/hostname")),
+                       ("image", ("/etc/image-version", "/etc/issue"))):
+        for path in paths:
+            try:
+                with open(path) as f:
+                    txt = f.read()
+                if key == "image" and "=" in txt:
+                    kv = dict(l.split("=", 1) for l in txt.splitlines() if "=" in l)
+                    txt = u"%s %s" % (kv.get("distro", kv.get("creator", u"")), kv.get("imageversion", kv.get("version", u"")))
+                txt = txt.strip().replace("\\n", "").replace("\\l", "").strip()
+                if txt:
+                    out[key] = txt.splitlines()[0][:60]
+                    break
+            except Exception:
+                continue
+    import sys as _sys
+    out["python"] = "%d.%d" % _sys.version_info[:2]
+    try:
+        sz = getDesktop(0).size()
+        out["screen"] = "%dx%d" % (sz.width(), sz.height())
+    except Exception:
+        pass
+    return out
 
-class Background(Hub16Bg, Hub17Bg, Hub18Bg, Hub19Bg):
+
+def report_url(note=u""):
+    """A GitHub 'new issue' link with everything needed, small enough for a QR code."""
+    try:
+        from urllib.parse import quote
+    except ImportError:
+        from urllib import quote
+    bi = box_info()
+    errs = [l.strip() for l in (ERRBUF + _LOGBUF)[-40:] if any(w in l for w in _ERR_WORDS)][-6:]
+    title = u"[%s] %s" % (bi.get("box", u"box")[:20], (note or u"Problem report")[:40])
+
+    def build(errs):
+        body = u"\n".join([
+            u"**Version:** %s%s" % (PLUGIN_VERSION, u" (lite)" if packs.is_lite() else u""),
+            u"**Receiver:** %s" % bi.get("box", u"?"), u"**Image:** %s" % bi.get("image", u"?"),
+            u"**Python:** %s  **Screen:** %s" % (bi.get("python"), bi.get("screen", u"?")),
+            u"", u"**What happened:**", note or u"", u"",
+            u"**Last errors:**", u"```"] + [e[:110] for e in errs] + [u"```"])
+        return u"https://github.com/%s/issues/new?title=%s&body=%s" % (
+            GITHUB_REPO, quote(title.encode("utf-8")), quote(body.encode("utf-8")))
+    url = build(errs)
+    while len(url) > 1800 and errs:                 # keep the QR code readable
+        errs = errs[1:]
+        url = build(errs)
+    return url[:1800]
+
+
+class Hub21Bg(object):
+    """2.1: house (several receivers), packs, menu use counts."""
+    house = None
+    house_q = None
+
+    def init21(self):
+        try:
+            for d in packs.atlas_dirs():
+                qtext.add_atlas_dir(d)
+
+            def got(ok):
+                for d in packs.atlas_dirs():
+                    qtext.add_atlas_dir(d)
+                if ok:
+                    qlog("packs installed: %s" % ok)
+            packs.ensure(got)
+        except Exception as e:
+            qlog("packs: %r" % (e,))
+        if self.cfg.get("house_code"):
+            self.house_start()
+
+    # -- several receivers ------------------------------------------------------------------------------
+    def house_start(self):
+        if self.house is not None:
+            self.house.close()
+            self.house = None
+        code = self.cfg.get("house_code")
+        if not code:
+            return False
+        import collections
+        self.house_q = collections.deque(maxlen=20)
+        try:
+            self.house = house.House(code, self.cfg.get("house_name") or box_info().get("box", u"receiver"),
+                                     self.house_q.append, self.house_state)
+            return True
+        except Exception as e:
+            qlog("house: %r" % (e,))
+            return False
+
+    def house_state(self):
+        if not Player.active or self.cur_live:
+            return {}
+        pp = self.play_pos()
+        return {"url": self.real_url(self.cur_url), "title": Player.cur_title, "pos": int(pp[0]) if pp else 0}
+
+    def house_tick(self):
+        """(GUI thread) commands from the other rooms."""
+        q = self.house_q
+        while q:
+            msg = q.popleft()
+            if msg.get("t") == "stop":
+                self.stop_play()
+                popup(u"أوقف التشغيل من: %s" % msg.get("name"), 4)
+            elif msg.get("t") == "play" and msg.get("url"):
+                self.house_play(msg)
+
+    def house_play(self, msg):
+        wait = max(0.0, msg.get("at", time.time()) - time.time())
+
+        def go():
+            late = max(0.0, time.time() - msg.get("at", time.time()))
+            self.resume_seek = int(msg.get("pos", 0) + late) or None
+            self.ctx = None
+            self.play_list([{"title": msg.get("title") or u"", "url": msg["url"]}], 0)
+            popup(u"🏠 تشغيل مع %s:\n%s" % (msg.get("name"), msg.get("title") or u""), 4)
+        if wait > 0.05:
+            self.house_timer, self.house_c = make_timer(go)
+            self.house_timer.start(int(wait * 1000), True)
+        else:
+            go()
+
+    # -- how often each menu item is used ---------------------------------------------------------------
+    @staticmethod
+    def use_key(label):
+        """Stable part of a menu label (without its current value and counters)."""
+        s = label.split(u":")[0]
+        s = re.sub(u"\\s*\\(\\d+\\)\\s*", u" ", s)
+        return s.replace(u"...", u"").strip()
+
+    def use_count(self, builder, label):
+        if not builder or builder.startswith("_"):
+            return
+        u = self.cfg.setdefault("usage", {})
+        k = u"%s|%s" % (builder, self.use_key(label))
+        u[k] = int(u.get(k, 0)) + 1
+        if len(u) > 120:                          # keep the most used only
+            for kk, _v in sorted(u.items(), key=lambda kv: kv[1])[:20]:
+                u.pop(kk, None)
+        self.save()
+
+    def most_used(self, n=4):
+        u = self.cfg.get("usage") or {}
+        return [k for k, v in sorted(u.items(), key=lambda kv: -kv[1]) if v >= 3][:n]
+
+
+class Background(Hub16Bg, Hub17Bg, Hub18Bg, Hub19Bg, Hub21Bg):
     """Everything that must survive closing/minimising the screen."""
 
     def __init__(self):
@@ -2905,6 +3069,10 @@ class Background(Hub16Bg, Hub17Bg, Hub18Bg, Hub19Bg):
                     self.station_url()                          # the channel needs the stream running
             except Exception as e:
                 qlog("init19: %r" % (e,))
+            try:
+                self.init21()
+            except Exception as e:
+                qlog("init21: %r" % (e,))
 
     gap_timer = None
     _c6 = None
@@ -6448,6 +6616,42 @@ def qr_png(text, path, scale=8, border=3):
     return size
 
 
+class QHQR(Screen):
+    """A QR code with a few lines of explanation (problem reports)."""
+
+    def __init__(self, session, title, png, info):
+        BG.attach(session)
+        th = THEMES[BG.theme_idx()]
+        bg = "#101418" if th["bg"] == "transparent" else th["bg"]
+        self.skin = (u'<screen name="QuranHubQR" position="0,0" size="%d,%d" flags="wfNoBorder" backgroundColor="%s">'
+                     u'<eLabel position="0,0" size="%d,%d" backgroundColor="%s" />'
+                     u'<widget name="qr_title" position="%d,%d" size="%d,%d" font="Regular;%d" halign="center" valign="center" foregroundColor="#ffffff" backgroundColor="%s" transparent="1" />'
+                     u'<widget name="qr_img" position="%d,%d" size="%d,%d" alphatest="off" zPosition="2" />'
+                     u'<widget name="qr_info" position="%d,%d" size="%d,%d" font="Regular;%d" halign="right" valign="top" foregroundColor="#e8edf2" backgroundColor="%s" transparent="1" />'
+                     u'</screen>') % (
+            p(1280), p(720), bg, p(1280), p(66), th["bar"],
+            p(20), p(4), p(1240), p(58), p(30), th["bar"],
+            p(60), p(100), p(560), p(560),
+            p(660), p(110), p(580), p(560), p(22), bg)
+        Screen.__init__(self, session)
+        self.skinName = "QuranHubQR"
+        self["qr_title"] = Label(i18n.T(title))
+        self["qr_img"] = Pixmap()
+        self["qr_info"] = Label(info)
+        self.qr_png = png
+        self["actions"] = ActionMap(["OkCancelActions"], {"cancel": self.close, "ok": self.close}, -1)
+        self.onLayoutFinish.append(self.qr_show)
+
+    def qr_show(self):
+        try:
+            from Tools.LoadPixmap import LoadPixmap
+            pm = LoadPixmap(self.qr_png)
+            if pm is not None:
+                self["qr_img"].instance.setPixmap(pm)
+        except Exception as e:
+            qlog("qr: %r" % (e,))
+
+
 class QHShare(Screen):
     """A QR code to open the ayah (and its tafsir) on the phone."""
 
@@ -7691,6 +7895,12 @@ class QuranHub(Screen):
 
     def qh_start(self):
         self.build_sections()
+        if not BG.cfg.get("wizard_done"):
+            if BG.cfg.get("hist") or BG.cfg.get("fav") or BG.cfg.get("seen_build"):
+                BG.cfg["wizard_done"] = True             # an existing user: no wizard
+            else:
+                self.qh_wz_timer, self._cwz = make_timer(self.wizard)
+                self.qh_wz_timer.start(600, True)
         seen = int(BG.cfg.get("seen_build", 0) or 0)
         if seen < BUILD:
             BG.cfg["seen_build"] = BUILD
@@ -8297,7 +8507,7 @@ class QuranHub(Screen):
             self.qh_status_text(u"تعذّر: %s" % e)
 
     def menu_lang(self):
-        self._choice(u"اللغة / Language", [(u"العربية", "ar"), (u"English", "en")], self._lang_set)
+        self._choice(u"اللغة / Language", [(n, k) for k, n in i18n.NAMES], self._lang_set)
 
     def _lang_set(self, c=None):
         if not c:
@@ -8307,7 +8517,7 @@ class QuranHub(Screen):
         i18n.LANG[0] = c[1]
         self.color_labels()
         self.build_sections(self.qh_extra_sec)
-        self.qh_status_text(u"Language: English" if c[1] == "en" else u"اللغة: العربية")
+        self.qh_status_text(dict(i18n.NAMES).get(c[1], c[1]))
 
     def show_whats_new(self, since=0):
         lines = whats_new_text(since) or whats_new_text(0)
@@ -8319,13 +8529,304 @@ class QuranHub(Screen):
 
     # ================================================================== v1.8 menus
     def _menu(self, title, items):
-        self._choice(title, [(l, f) for l, f in items], lambda c: c and c[1]())
+        """A menu.  2.1: counts what is chosen (for «الأكثر استخداماً») and can be read by the menu search."""
+        import sys as _sys
+        builder = _sys._getframe(1).f_code.co_name
+
+        def run(c=None):
+            if not c:
+                return
+            try:
+                BG.use_count(builder, c[2] if len(c) > 2 else c[0])
+            except Exception:
+                pass
+            c[1]()
+        run.qh_menu = True
+        self._choice(title, [(l, f, l) for l, f in items], run)
+
+    # ================================================================== 2.1 menus
+    MENU_ROOT = ("key_menu", "menu_display", "menu_time", "menu_reader", "menu_library", "menu_misc", "menu_bot",
+                 "menu_hdd", "menu_station", "menu_ramadan", "menu_tv", "menu_mylib", "menu_disk", "menu_backup",
+                 "menu_update", "menu_phone", "menu_house", "menu_learn")
+
+    def _capture(self, fn):
+        """Run a menu builder without showing anything -> [(title, [(label, fn)])]."""
+        got = []
+        keep = (self._choice, self.session.open, self.session.openWithCallback, self.qh_status_text)
+        self.qh_capturing = True
+        self._choice = lambda title, opts, cb: got.append((title, opts, cb))
+        self.session.open = lambda *a, **k: None
+        self.session.openWithCallback = lambda *a, **k: None
+        self.qh_status_text = lambda *a, **k: None
+        try:
+            fn()
+        except Exception as e:
+            qlog("capture: %r" % (e,))
+        finally:
+            self._choice, self.session.open, self.session.openWithCallback, self.qh_status_text = keep
+            self.qh_capturing = False
+        return [(t, [(o[0], o[1]) for o in opts]) for t, opts, cb in got if getattr(cb, "qh_menu", False)]
+
+    def menu_index(self):
+        """Every item of the main menus (two levels) -> [(path, label, fn)]."""
+        out, seen = [], set()
+        for name in self.MENU_ROOT:
+            fn = getattr(self, name, None)
+            if fn is None:
+                continue
+            for title, items in self._capture(fn):
+                for label, f in items:
+                    key = (title, BG.use_key(label))
+                    if key in seen or not callable(f):
+                        continue
+                    seen.add(key)
+                    out.append((title, label, f))
+        return out
+
+    def menu_search(self):
+        def go(q=None):
+            if not q:
+                return
+            nq = data.norm(q)
+            hits = [(u"%s  ‹ %s" % (l, t), f) for t, l, f in self.menu_index()
+                    if nq in data.norm(l) or nq in data.norm(i18n.T(l))]
+            if not hits:
+                return self.qh_status_text(u"لا توجد نتائج")
+            self._choice(u"نتائج البحث في القوائم: %s" % q, hits[:40], lambda c: c and c[1]())
+        self.session.openWithCallback(go, VirtualKeyBoard, title=i18n.T(u"ابحث في القوائم والإعدادات"), text=u"")
+
+    def run_used(self, key):
+        builder, lk = key.split(u"|", 1)
+        fn = getattr(self, builder, None)
+        if fn is None:
+            return
+        for _t, items in self._capture(fn):
+            for label, f in items:
+                if BG.use_key(label) == lk:
+                    BG.use_count(builder, label)
+                    return f()
+        self.qh_status_text(u"هذا الاختيار غير متاح الآن")
+
+    def used_items(self):
+        out = []
+        for k in BG.most_used():
+            label = k.split(u"|", 1)[1]
+            out.append((u"⭐ " + label, (lambda kk=k: self.run_used(kk))))
+        return out
+
+    # -- report a problem --------------------------------------------------------------------------------
+    def report_problem(self):
+        def go(note=None):
+            if note is None:
+                return
+            url = report_url(note)
+            path = data.tmp_path("sqh_report.png")
+            try:
+                qr_png(url, path, scale=5, border=2)
+            except Exception as e:
+                return self.qh_status_text(u"تعذّر إنشاء الكود: %s" % e)
+            bi = box_info()
+            info = u"\n".join([u"امسح الكود بالجوال: تفتح صفحة بلاغ جاهزة على GitHub فيها:",
+                               u"• الإصدار %s • %s • %s" % (PLUGIN_VERSION, bi.get("box", u"?"), bi.get("image", u"?")),
+                               u"• آخر الأخطاء من سجل البلاجين", u"",
+                               u"اكتب ما حدث بلغتك ثم اضغط Submit (يلزم حساب GitHub مجاني)."])
+            self.session.open(QHQR, u"الإبلاغ عن مشكلة", path, info)
+            if BG.bot is not None and private_edition():
+                BG.tg_notify(u"🐞 بلاغ من الجهاز:\n%s\n%s" % (note, url[:600]))
+        self.session.openWithCallback(go, VirtualKeyBoard, title=i18n.T(u"اكتب المشكلة باختصار (اختياري)"), text=u"")
+
+    # -- first start ---------------------------------------------------------------------------------------
+    def wizard(self, step=0):
+        steps = [self.wz_lang, self.wz_city, self.wz_reciter, self.wz_disk]
+        if step >= len(steps):
+            BG.cfg["wizard_done"] = True
+            BG.save()
+            self.build_sections()
+            self.color_labels()
+            return self.qh_status_text(u"تم الإعداد - بارك الله فيك")
+        steps[step](lambda: self.wizard(step + 1))
+
+    def wz_lang(self, nxt):
+        def done(c=None):
+            if c:
+                self._lang_set(c)
+            nxt()
+        self._choice(u"مرحباً بك في Saad Quran Hub (1/4)\nاللغة / Language", [(n, k) for k, n in i18n.NAMES], done)
+
+    def wz_city(self, nxt):
+        def done(c=None):
+            if c and c[1]:
+                self._city_set(c)
+            nxt()
+        self._choice(u"(2/4) مدينتك لمواقيت الصلاة والأذان",
+                     [(u"تخطَّ الآن", None)] + [(c[0], c[0]) for c in extras.CITIES], done)
+
+    def wz_reciter(self, nxt):
+        def got(rows):
+            if isinstance(rows, Exception) or not rows:
+                return nxt()
+            opts = [(u"تخطَّ الآن", None)] + [(l, l) for l, x in rows if x][:300]
+
+            def done(c=None):
+                if c and c[1]:
+                    favs = BG.cfg.setdefault("fav", [])
+                    if ["mp3q_reciters", c[1]] not in favs:
+                        favs.insert(0, ["mp3q_reciters", c[1]])
+                    BG.save()
+                nxt()
+            self._choice(u"(3/4) قارئك المفضل (يظهر في «المفضلة» وفي الوضع المبسّط)", opts, done)
+        Runner().run(section_loader("mp3q_reciters"), got, got)
+
+    def wz_disk(self, nxt):
+        d = data.home_dir()
+        if not d:
+            _studio_info(self.session, u"(4/4) لا يوجد HDD أو فلاشة.\nالبلاجين يعمل كاملاً، وإذا وصّلت فلاشة لاحقاً "
+                                       u"تُحفظ عليها التلاوات للعمل بدون إنترنت.")
+            return nxt()
+
+        def done(c=None):
+            if c:
+                BG.cfg["audio_cache"] = c[1]
+                AUDIO.enabled = c[1]
+                BG.save()
+            nxt()
+        self._choice(u"(4/4) وجدت قرصاً: %s\nأحفظ ما تسمعه عليه ليعمل بدون إنترنت؟" % os.path.dirname(d),
+                     [(u"نعم (مستحسن)", True), (u"لا", False)], done)
+
+    # -- learning: translation and tafsir audio --------------------------------------------------------------
+    def menu_learn(self):
+        it = [(u"🌍 الآية ثم ترجمتها صوتياً ...", self.learn_translation),
+              (u"🎧 التفسير الصوتي (الميسر) ...", self.learn_tafsir),
+              (u"📋 قوائم جاهزة من المطوّر ...", self.menu_shared_lists)]
+        self._menu(u"التعلّم والترجمة", it)
+
+    def _pick_surah(self, title, cb):
+        self._choice(title, [(u"%d. %s" % (n, data.surah_name(n)), n) for n in range(1, 115)], lambda c: c and cb(c[1]))
+
+    def learn_translation(self):
+        def lang(c=None):
+            if not c:
+                return
+            edition = c[1]
+            BG.cfg["tr_audio"] = edition
+            BG.save()
+
+            def surah(n):
+                rec = int(BG.cfg.get("ramadan_rec", 0))
+                BG.set_status(u"جاري تجهيز الترجمة الصوتية ...", notify=True)
+                Runner().run(lambda: studio.translation_items(n, rec, edition),
+                             lambda items: self._play_items(items, u"الآية ثم ترجمتها: سورة %s" % data.surah_name(n)),
+                             lambda e: BG.set_status(u"تعذّر: %s" % e, notify=True))
+            self._pick_surah(u"اختر السورة", surah)
+        self._choice(u"لغة الترجمة الصوتية", [(l, e) for l, e in studio.TRANSLATION_AUDIO], lang)
+
+    def learn_tafsir(self):
+        def surah(n):
+            BG.set_status(u"جاري تحميل التفسير الصوتي ...", notify=True)
+
+            def got(rows):
+                if isinstance(rows, Exception) or not rows:
+                    return BG.set_status(u"التفسير الصوتي غير متاح الآن", notify=True)
+                items = [{"title": u"التفسير الميسر - %s %s" % (data.surah_name(s), name), "url": u, "autonext": True}
+                         for s, name, u in rows]
+                self._play_items(items, u"التفسير الصوتي: سورة %s" % data.surah_name(n))
+            Runner().run(lambda: studio.tafsir_audio(n), got, got)
+        self._pick_surah(u"التفسير الصوتي - اختر السورة", surah)
+
+    def _play_items(self, items, status):
+        if isinstance(items, Exception) or not items:
+            return BG.set_status(u"لا توجد عناصر", notify=True)
+        BG.ctx = None
+        BG.play_list(items, 0)
+        BG.set_status(status, notify=True)
+
+    def menu_shared_lists(self):
+        def got(rows):
+            if isinstance(rows, Exception) or not rows:
+                return self.qh_status_text(u"تعذّر تحميل القوائم الجاهزة")
+            self._choice(u"قوائم جاهزة من المطوّر", [(u"%s  (%s)" % (x["name"], x.get("desc", u"")), x) for x in rows],
+                         lambda c: c and self.shared_list_actions(c[1]))
+        Runner().run(studio.shared_lists, got, got)
+
+    def shared_list_actions(self, entry):
+        def load(then):
+            Runner().run(lambda: studio.shared_list(entry), then, lambda e: self.qh_status_text(u"تعذّر: %s" % e))
+
+        def save(items):
+            BG.cfg.setdefault("pls", {})[entry["name"]] = [dict((k, x[k]) for k in ("title", "url", "autonext", "ayah") if k in x)
+                                                          for x in items]
+            BG.save()
+            self.qh_status_text(u"أُضيفت إلى «قوائمي»: %s (%d)" % (entry["name"], len(items)))
+        self._menu(entry["name"], [(u"▶ تشغيل الآن", lambda: load(lambda it: self._play_items(it, entry["name"]))),
+                                   (u"➕ إضافة إلى «قوائمي»", lambda: load(save))])
+
+    # -- several receivers --------------------------------------------------------------------------------------
+    def menu_house(self):
+        cfg = BG.cfg
+        code = cfg.get("house_code")
+        it = [(u"رمز البيت: %s (نفس الرمز على كل الأجهزة)" % (code or u"غير محدد"), self.house_code_set),
+              (u"اسم هذا الجهاز: %s" % (cfg.get("house_name") or box_info().get("box", u"")), self.house_name_set)]
+        if code and BG.house is not None:
+            it += [(u"🏠 تشغيل ما يعمل الآن في كل الغرف معاً", self.house_play_all),
+                   (u"⏹ إيقاف التشغيل في كل الغرف", lambda: (BG.house.stop_everywhere(), BG.stop_play())),
+                   (u"↪ أكمل هنا ما يعمل في غرفة أخرى ...", self.house_continue)]
+        self._menu(u"أجهزة البيت (أكثر من ريسيفر)", it)
+
+    def house_code_set(self):
+        def done(t=None):
+            if t is None:
+                return
+            t = t.strip()
+            BG.cfg["house_code"] = t
+            BG.save()
+            ok = BG.house_start() if t else True
+            self.qh_status_text(u"رمز البيت: %s" % (t or u"متوقف") if ok else u"تعذّر تشغيل اتصال البيت")
+        self.session.openWithCallback(done, VirtualKeyBoard, title=i18n.T(u"رمز البيت (اكتب نفس الرمز على كل الأجهزة)"),
+                                      text=BG.cfg.get("house_code") or u"")
+
+    def house_name_set(self):
+        def done(t=None):
+            if t:
+                BG.cfg["house_name"] = t.strip()
+                BG.save()
+                BG.house_start()
+        self.session.openWithCallback(done, VirtualKeyBoard, title=i18n.T(u"اسم هذا الجهاز (مثلاً: الصالة)"),
+                                      text=BG.cfg.get("house_name") or u"")
+
+    def house_play_all(self):
+        st = BG.house_state()
+        if not st.get("url"):
+            return self.qh_status_text(u"شغّل تلاوة أولاً (الإذاعات المباشرة لا تحتاج تزامناً)")
+        at = BG.house.play_everywhere(st["url"], st["title"], st["pos"] + 3)
+        BG.house_play({"url": st["url"], "title": st["title"], "pos": st["pos"] + 3, "at": at, "name": u"هذا الجهاز"})
+        self.qh_status_text(u"🏠 التشغيل في كل الغرف بعد 3 ثوانٍ")
+
+    def house_continue(self):
+        def found(peers):
+            if isinstance(peers, Exception) or not peers:
+                return self.qh_status_text(u"لم أجد أجهزة أخرى بنفس رمز البيت")
+
+            def pick(c=None):
+                if not c:
+                    return
+
+                def got(st):
+                    if isinstance(st, Exception) or not st or not st.get("url"):
+                        return self.qh_status_text(u"لا يعمل شيء هناك الآن")
+                    BG.house_play(dict(st, at=time.time(), name=c[0]))
+                Runner().run(lambda: BG.house.ask_state(c[1]), got, got)
+            self._choice(u"أكمل من أي غرفة؟", [(v.get("name") or k, k) for k, v in peers.items()], pick)
+        Runner().run(BG.house.discover, found, found)
+
 
     def key_menu(self):
         cfg = BG.cfg
         it = []
         if Player.active or BG.rec is not None or BG.tv_want:
             it.append((u"إغلاق البلاجين وإيقاف القرآن (يعود صوت القناة)", self.key_exit))
+        if not getattr(self, "qh_capturing", False):
+            it += self.used_items()                     # 2.1: the most used choices, right at the top
+        it.append((u"🔍 بحث في القوائم والإعدادات ...", self.menu_search))
         if Player.active:
             it.append((u"🎛 المشغّل الكبير (سرعة • تكرار • علامات)", self.open_player))
             it.append((u"سرعة التلاوة: ×%s ..." % BG._sp(BG.cur_speed()), self.speed_menu))
@@ -8365,6 +8866,9 @@ class QuranHub(Screen):
                (u"🌾 حصاد السنة", lambda: self.show_harvest("year")),
                (u"⭐ النجوم", self.show_stars),
                (u"📡 مكتبتي لأجهزة البيت (DLNA) ...", self.menu_dlna),
+               (u"🎓 التعلّم والترجمة الصوتية ...", self.menu_learn),
+               (u"🏠 أجهزة البيت (أكثر من ريسيفر) ...", self.menu_house),
+               (u"🐞 الإبلاغ عن مشكلة (كود QR)", self.report_problem),
                (u"المظهر والعرض والاختصارات ...", self.menu_display),
                (u"التحكم من الجوال ...", self.menu_phone),
                (u"قنوات تليجرام (إضافة / حذف) ...", self.menu_tg),
@@ -8558,7 +9062,7 @@ class QuranHub(Screen):
     def menu_display(self):
         cfg = BG.cfg
         self._menu(u"القناة والعرض والتحكم", [
-            (u"اللغة / Language: %s" % (u"English" if i18n.on() else u"العربية"), self.menu_lang),
+            (u"اللغة / Language: %s" % dict(i18n.NAMES).get(i18n.LANG[0], u"العربية"), self.menu_lang),
             (u"الوضع المبسّط (لكبار السن): %s" % self._on(cfg.get("simple_mode", False)),
              lambda: BG.toggle_flag("simple_mode", False, u"الوضع المبسّط - يظهر عند فتح البلاجين")),
             (u"مؤقت النوم: خفض الصوت تدريجياً ثم الانتظار: %s" % self._on(cfg.get("sleep_standby", True)),
@@ -9577,7 +10081,12 @@ class QuranHub(Screen):
             return BG.gh_check(manual=True)
         BG.cfg["update_url"] = gh["ipk"]
         BG.save()
-        self.qh_expect_sha = gh.get("sha256") or None
+        if packs.is_lite() and gh.get("ipk_lite"):        # 2.1: the lite package stays lite
+            BG.cfg["update_url"] = gh["ipk_lite"]
+            BG.save()
+            self.qh_expect_sha = gh.get("sha256_lite") or None
+        else:
+            self.qh_expect_sha = gh.get("sha256") or None
         self.update_from_url()
 
     def set_update_url(self):

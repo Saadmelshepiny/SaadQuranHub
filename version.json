@@ -1,6 +1,8 @@
 {
-  "version": "1.3.2",
-  "ipk": "https://raw.githubusercontent.com/Saadmelshepiny/SaadQuranHub/main/ipk/enigma2-plugin-extensions-saadquranhub_1.3.2_all.ipk",
-  "sha256": "800c281ab3877df80284dbdc895ea77866e749527764bbd48838c8a0f3a6ada5",
-  "notes": "زر MENU يعمل على OpenATV 8 وما بعده"
+  "version": "1.4",
+  "ipk": "https://raw.githubusercontent.com/Saadmelshepiny/SaadQuranHub/main/ipk/enigma2-plugin-extensions-saadquranhub_1.4_all.ipk",
+  "sha256": "d1326b68721bcc9715c3383d08bed9bd51e7626d7928ac0fa220ca28a2f032fa",
+  "ipk_lite": "https://raw.githubusercontent.com/Saadmelshepiny/SaadQuranHub/main/ipk/enigma2-plugin-extensions-saadquranhub-lite_1.4_all.ipk",
+  "sha256_lite": "f74f301b71588af3feeefe22c573eb322f8898e62af5104c07b66e5513936bb9",
+  "notes": "معالج أول تشغيل • بحث في القوائم • الإبلاغ عن مشكلة بكود QR • فرنسي وتركي وأردو • الترجمة والتفسير الصوتي • قوائم جاهزة • المصحف على الجوال • تشغيل في كل الغرف • حزمة خفيفة"
 }

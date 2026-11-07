@@ -64,6 +64,10 @@ select{width:100%;font-size:17px;padding:10px;border-radius:12px;background:var(
 .rd .now{background:#1b3a2a;border-radius:10px;padding:4px 8px}
 #vv{font-size:24px;line-height:2;text-align:center;color:#ffe9a8;font-family:"Amiri","Traditional Arabic",serif;min-height:10px}
 #wk{white-space:pre-line;font-size:15px;line-height:1.9}
+#mp{font-size:22px;line-height:2.2;text-align:justify;font-family:"Amiri","Traditional Arabic",serif;color:#2b2210;background:#fbf3dc;
+ border-radius:14px;padding:14px 16px;border:6px double #b8913a}
+#mp .sh{display:block;text-align:center;color:#7a5512;font-weight:700;margin:6px 0}#mp .on{background:#f3d27a;border-radius:6px}
+#mp .n{color:#7a5512;font-size:16px}#mh{display:flex;justify-content:space-between;align-items:center;color:var(--dm);font-size:14px;margin-bottom:8px}
 </style></head><body>
 <header><span>القرآن الكريم</span><small id="clk"></small></header><div id="off">لا يوجد اتصال بالجهاز</div>
 <div id="pinbox"><div><p>أدخل رمز الدخول الظاهر على شاشة التلفاز</p><input id="pin" inputmode="numeric" maxlength="8">
@@ -92,17 +96,21 @@ select{width:100%;font-size:17px;padding:10px;border-radius:12px;background:var(
 
 <section class="tab" id="t2"><div id="lists"></div></section>
 
+<section class="tab" id="t6"><div id="mh"><span id="mpn"></span><label><input type="checkbox" id="mf" checked> يتبع التلفاز</label></div>
+<div id="mp">...</div><div class="row"><button onclick="mpg(MP+1)">◀ التالية</button><button onclick="mpnow()">الآية الحالية</button>
+<button onclick="mpg(MP-1)">السابقة ▶</button></div></section>
+
 <section class="tab" id="t3"><div class="card"><h3 id="city"></h3><div id="pt"></div><p id="np" style="color:var(--au)"></p>
 <div class="row"><button onclick="c('adhan_test')">🔔 تجربة الأذان</button></div></div>
 <div class="card"><h3>ملخص الأسبوع</h3><div id="wk"></div></div></section>
 
 <nav><a class="on" id="n1" onclick="tab(1)"><b>▶</b>التحكم</a><a id="n2" onclick="tab(2)"><b>☰</b>المكتبة</a>
-<a id="n4" onclick="tab(4)"><b>📖</b>القراءة</a><a id="n5" onclick="tab(5)"><b>📿</b>الأذكار</a>
+<a id="n6" onclick="tab(6)"><b>📗</b>المصحف</a><a id="n4" onclick="tab(4)"><b>📖</b>القراءة</a><a id="n5" onclick="tab(5)"><b>📿</b>الأذكار</a>
 <a id="n3" onclick="tab(3)"><b>🕌</b>الصلاة</a></nav>
 <script>
 var PIN=localStorage.getItem("qh_pin")||"",$=function(i){return document.getElementById(i)},fail=0;
 function q(u){return u+(u.indexOf("?")<0?"?":"&")+"pin="+encodeURIComponent(PIN)}
-function tab(n){for(var i=1;i<6;i++){$("t"+i).className="tab"+(i==n?" on":"");$("n"+i).className=i==n?"on":""}}
+function tab(n){for(var i=1;i<7;i++){$("t"+i).className="tab"+(i==n?" on":"");$("n"+i).className=i==n?"on":""}}
 function setpin(){PIN=$("pin").value;localStorage.setItem("qh_pin",PIN);$("pinbox").style.display="none";st()}
 function c(x){fetch(q("/api/cmd?c="+encodeURIComponent(x))).then(st)}
 function p(k,i){fetch(q("/api/play?k="+k+"&i="+i)).then(function(){tab(1);st()})}
@@ -117,11 +125,20 @@ function st(){fetch(q("/api/state")).then(function(r){
  var h="";(d.prayers||[]).forEach(function(x){h+='<div class="pr'+(x[2]?' nx':'')+'"><span>'+x[0]+'</span><span>'+x[1]+'</span></div>'});$("pt").innerHTML=h;
  LAST=d;$("np").textContent=d.next||"";$("vv").textContent=d.verse||"";$("wk").textContent=d.week||"";CUR=d.surah||0;
  if(d.surah&&RN==d.surah&&d.verse_no!=VN){VN=d.verse_no;hl()}
+ if(d.surah&&$("mf").checked&&(d.surah+":"+d.verse_no)!=MK){MK=d.surah+":"+d.verse_no;mpat(d.surah,d.verse_no)}
  h="";(d.lists||[]).forEach(function(L){h+="<h3>"+L.name+"</h3><div class='card' style='padding:0'>";
   L.items.forEach(function(it,i){h+='<div class="it" onclick="p(\\''+L.key+'\\','+i+')">'+it.t+(it.live?'<span class="live">LIVE</span>':'')+'</div>'});h+="</div>"});
  if($("lists").dataset.h!==h){$("lists").innerHTML=h;$("lists").dataset.h=h}
 }).catch(function(){fail++;if(fail>2)$("off").style.display="block"})}
-var CUR=0,RN=0,VN=0,META=null,LAST=null;
+var CUR=0,RN=0,VN=0,META=null,LAST=null,MP=1,MK="",MV=[];
+function mshow(d){MP=d.page;MV=d.verses;$("mpn").textContent="صفحة "+d.page+" • "+(d.juz?("الجزء "+d.juz):"");var h="";
+ d.verses.forEach(function(v){if(v[1]==1)h+='<span class="sh">سورة '+esc(v[3])+'</span>';
+  h+='<span id="m'+v[0]+'_'+v[1]+'">'+esc(v[2])+' <span class="n">﴿'+v[1]+'﴾</span></span> '});$("mp").innerHTML=h;mhl()}
+function mhl(){var o=document.querySelector("#mp .on");if(o)o.className="";if(!LAST||!LAST.surah)return;
+ var e=$("m"+LAST.surah+"_"+LAST.verse_no);if(e){e.className="on";if($("t6").className.indexOf("on")>=0)e.scrollIntoView({block:"center",behavior:"smooth"})}}
+function mpg(p){if(p<1||p>604)return;fetch(q("/api/page?p="+p)).then(function(r){return r.json()}).then(mshow)}
+function mpat(n,a){fetch(q("/api/page?n="+n+"&a="+a)).then(function(r){return r.json()}).then(function(d){if(d.page!=MP||!MV.length)mshow(d);else mhl()})}
+function mpnow(){if(LAST&&LAST.surah){$("mf").checked=true;mpat(LAST.surah,LAST.verse_no)}}
 function toPhone(){if(!LAST||!LAST.url){alert("لا توجد تلاوة يمكن نقلها الآن");return}var a=$("pa");a.style.display="block";
  a.src=LAST.url;a.onloadedmetadata=function(){try{a.currentTime=LAST.pos||0}catch(e){}};a.play();c("phone")}
 function toTv(){var a=$("pa");var s=Math.floor(a.currentTime||0);a.pause();a.style.display="none";c("tvat:"+s)}
@@ -243,7 +260,7 @@ class RemoteServer(object):
                 if u.path == "/api/cmd":
                     outer.push(("cmd", qs.get("c", [""])[0]))
                     return self._send(200, "{}", "application/json")
-                if u.path in ("/api/text", "/api/meta", "/api/adhkar"):
+                if u.path in ("/api/text", "/api/meta", "/api/adhkar", "/api/page"):
                     try:
                         return self._send(200, json.dumps(api_data(u.path, qs), ensure_ascii=False), "application/json")
                     except Exception as e:
@@ -288,6 +305,23 @@ def api_data(path, qs):
         cats = studio.adhkar_categories()
         i = max(0, min(len(cats) - 1, int(qs.get("i", ["0"])[0])))
         return {"title": cats[i][0], "items": [[extras.sanitize(t), n] for t, n in cats[i][1]]}
+    if path == "/api/page":                    # 2.1: the mushaf page on the phone, following the TV
+        if "p" in qs:
+            pg = int(qs["p"][0])
+        else:
+            pg = studio.page_of(int(qs.get("n", ["1"])[0]), int(qs.get("a", ["1"])[0]))
+        pg = max(1, min(604, pg))
+        out, texts = [], {}
+        for n_, a_ in studio.page_ayahs(pg):
+            if n_ not in texts:
+                texts[n_] = dict(extras.local_verses(n_) or [])
+            out.append([n_, a_, extras.sanitize(texts[n_].get(a_, u"")), data.surah_name(n_)])
+        juz = 0
+        try:
+            juz = studio.juz_of(out[0][0], out[0][1]) if out else 0
+        except Exception:
+            pass
+        return {"page": pg, "verses": out, "juz": juz}
     n = max(1, min(114, int(qs.get("n", ["1"])[0])))
     m = qs.get("m", ["text"])[0]
     if m not in ("text", "tafsir", "translation"):

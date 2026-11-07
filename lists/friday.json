@@ -1,0 +1,35 @@
+{
+ "name": "سنن يوم الجمعة والليل",
+ "items": [
+  {
+   "title": "سورة الكهف",
+   "server": "https://server13.mp3quran.net/husr/",
+   "n": 18
+  },
+  {
+   "title": "سورة يس",
+   "server": "https://server13.mp3quran.net/husr/",
+   "n": 36
+  },
+  {
+   "title": "سورة الملك",
+   "server": "https://server13.mp3quran.net/husr/",
+   "n": 67
+  },
+  {
+   "title": "سورة السجدة",
+   "server": "https://server13.mp3quran.net/husr/",
+   "n": 32
+  },
+  {
+   "title": "سورة الواقعة",
+   "server": "https://server13.mp3quran.net/husr/",
+   "n": 56
+  },
+  {
+   "title": "سورة الدخان",
+   "server": "https://server13.mp3quran.net/husr/",
+   "n": 44
+  }
+ ]
+}
