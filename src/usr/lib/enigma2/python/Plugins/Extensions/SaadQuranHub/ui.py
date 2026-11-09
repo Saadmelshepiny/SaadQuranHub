@@ -8,6 +8,7 @@ full panel takes a few milliseconds even on a small receiver."""
 import hashlib
 import math
 import os
+import threading
 import struct
 import zlib
 
@@ -277,7 +278,9 @@ def cached(kind, *args):
     key = hashlib.md5(repr((kind.__name__, args)).encode("utf-8")).hexdigest()[:16]
     path = os.path.join(CACHE, "%s_%s.png" % (kind.__name__, key))
     if not os.path.exists(path):
-        kind(*args).save(path)
+        tmp = "%s.%d.tmp" % (path, threading.current_thread().ident or 0)
+        kind(*args).save(tmp)
+        os.rename(tmp, path)
     return path
 
 

@@ -86,7 +86,7 @@ from . import packs
 from . import house
 from . import ui
 
-PLUGIN_VERSION = "2.0"
+PLUGIN_VERSION = "2.0.1"
 GITHUB_REPO = "Saadmelshepiny/SaadQuranHub"
 GITHUB_INFO = "https://raw.githubusercontent.com/%s/main/version.json" % GITHUB_REPO
 
@@ -910,6 +910,199 @@ def make_timer(callback):
         t.callback.append(callback)
         return t, None
     return t, t.timeout.connect(callback)
+
+
+class Painter(object):
+    """3.0.1: draws the lines of the ayat off the GUI thread.  One worker thread; for each key only the
+    newest request counts (a seek or a fast ayah change drops the older ones), the result comes back on
+    the GUI thread where the drawn pictures are only loaded (instant), so the screen never stops while
+    the Quran is recited."""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.jobs = {}
+        self.order = []
+        self.gen = {}
+        self.out = queue.Queue()
+        self.ev = threading.Event()
+        self.thread = None
+        self.inflight = 0
+        self.timer, self._c = make_timer(self._poll)
+
+    def ask(self, key, fn, cb):
+        with self.lock:
+            g = self.gen.get(key, 0) + 1
+            self.gen[key] = g
+            self.jobs[key] = (g, fn, cb)
+            if key in self.order:
+                self.order.remove(key)
+            self.order.append(key)
+        if self.thread is None or not self.thread.is_alive():
+            self.thread = threading.Thread(target=self._loop)
+            self.thread.daemon = True
+            self.thread.start()
+        self.ev.set()
+        self.timer.start(120, False)
+
+    def drop(self, key):
+        with self.lock:
+            self.gen[key] = self.gen.get(key, 0) + 1
+            self.jobs.pop(key, None)
+            if key in self.order:
+                self.order.remove(key)
+
+    def busy(self):
+        with self.lock:
+            return bool(self.jobs) or self.inflight > 0
+
+    def _loop(self):
+        while True:
+            self.ev.wait(60)
+            with self.lock:
+                if not self.order:
+                    self.ev.clear()
+                    continue
+                key = self.order.pop(0)
+                g, fn, cb = self.jobs.pop(key)
+                self.inflight += 1
+            try:
+                res = fn()
+            except Exception as e:
+                res = e
+            self.out.put((key, g, cb, res))
+            with self.lock:
+                self.inflight -= 1
+
+    def _poll(self):
+        while True:
+            try:
+                key, g, cb, res = self.out.get_nowait()
+            except queue.Empty:
+                break
+            if self.gen.get(key) != g:
+                continue                      # a newer request replaced this one
+            if isinstance(res, Exception):
+                qlog("painter %s: %r" % (key, res))
+                continue
+            try:
+                cb(res)
+            except Exception as e:
+                qlog("painter cb %s: %r" % (key, e))
+        if not self.busy() and self.out.empty():
+            self.timer.stop()
+
+
+_PAINTER = []
+
+
+def painter():
+    if not _PAINTER:
+        _PAINTER.append(Painter())
+    return _PAINTER[0]
+
+
+def draw_lines(specs):
+    """(painter thread) draw every (text, px, color, h, colors) line; returns the specs."""
+    for sp in specs:
+        if sp and sp[0].strip():
+            qtext.render(sp[0], sp[1], sp[2], sp[3], sp[4] if len(sp) > 4 else None)
+    return specs
+
+
+def np_ayah_spec(n, a, px, col, h, lim, tj):
+    """(painter thread) one ayah cut to fit the now-playing bar -> line spec."""
+    words = extras.sanitize(dict(extras.local_verses(n) or []).get(a, u"")).split()
+    end = u"﴿%s﴾" % extras.ar_num(a)
+    out = []
+    for w_ in words:
+        if qtext.line_width(u" ".join(out + [w_, end]), px) > lim:
+            out.append(u"…")
+            break
+        out.append(w_)
+    text = u" ".join(out) + u" " + end
+    return (text, px, col, h, line_tajweed(text) if tj else None)
+
+
+def card_specs(n, first, hi, hc, base):
+    """(painter thread) the six mushaf lines of the light card from ayah `first`; ayah `hi` coloured."""
+    hT = p(58)
+    title = (u"سُورَةُ %s" % data.surah_name(n), int(hT / 1.85), 0xf4ecd2, hT, None)
+    words = []
+    for vn, vt in extras.local_verses(n) or []:
+        if vn < first:
+            continue
+        for w_ in extras.sanitize(vt).split():
+            words.append((w_, vn))
+        words.append((u"﴿%s﴾" % extras.ar_num(vn), vn))
+        if len(words) > 120:
+            break
+    h = p(60)
+    px = int(h / 1.85)
+    lim = p(382) - p(8)
+    lines, curl = [], []
+    for w_, vn in words:
+        trial = u" ".join(x for x, _v in curl + [(w_, vn)])
+        if curl and qtext.line_width(trial, px) > lim:
+            lines.append(curl)
+            curl = []
+            if len(lines) == 6:
+                break
+        curl.append((w_, vn))
+    if curl and len(lines) < 6:
+        lines.append(curl)
+    # the last ayah whose end is on the card: the window moves on after it
+    last = first
+    for ln in lines:
+        for x, vn in ln:
+            if x.startswith(u"﴿"):
+                last = vn
+    specs = []
+    for ln in lines:
+        text = u" ".join(x for x, _v in ln)
+        colors, pos = {}, 0
+        for x, vn in ln:
+            if hi and vn == hi:
+                for k in range(pos, pos + len(x)):
+                    colors[k] = hc
+            pos += len(x) + 1
+        specs.append((text, px, base, h, colors or None))
+    return {"n": n, "first": first, "last": max(first, last), "title": title, "lines": specs}
+
+
+def player_specs(n, first, total, vrows, hi, gold, dim, tj, avail, only=None):
+    """(painter thread) [(ayah, line spec)] of the player's surah card."""
+    verses = dict(extras.local_verses(n) or [])
+    hh = p(54)
+    px = int(hh / 1.85)
+    h = p(63)
+    out = []
+    for k in range(first, min(total, first + vrows - 1) + 1):
+        if only and k not in only:
+            continue
+        words = extras.sanitize(verses.get(k, u"")).split()
+        cut = []
+        for w_ in words:
+            if qtext.line_width(u" ".join(cut + [w_]), px) > avail - p(30):
+                cut.append(u"…")
+                break
+            cut.append(w_)
+        line = u" ".join(cut)
+        cur = k == hi
+        out.append((k, (line, px, gold if cur else dim, h, line_tajweed(line) if cur and tj else None)))
+    return out
+
+
+def tafsir_text(key, n, a):
+    """(painter thread) the tafsir of one ayah from the files on the receiver."""
+    arr = extras.local_tafsir(key, n) or extras.local_tafsir("muyassar", n)
+    t = u""
+    if isinstance(arr, list) and 0 < a <= len(arr):
+        t = arr[a - 1]
+    elif isinstance(arr, dict):
+        t = arr.get(str(a)) or u""
+    if u"[التفسير]" in t:
+        t = t.split(u"[التفسير]", 1)[1]
+    return u" ".join(t.split())
 
 
 class AudioOut(object):
@@ -2168,9 +2361,10 @@ class Hub17Bg(object):
             return None
         tl, _m = self.timing_for(n)
         if tl and self.sync_exact:
+            k = self.sync_scale or 1.0
             for aa, s, e in tl:
                 if aa == a:
-                    return s / 1000.0, e / 1000.0
+                    return s * k / 1000.0, e * k / 1000.0
         return None
 
     def repeat_ayah(self, times):
@@ -2302,8 +2496,11 @@ class Hub17Bg(object):
 
 
 
-BUILD = 30             # one number for both editions (the "what's new" screen and the changelog)
+BUILD = 31             # one number for both editions (the "what's new" screen and the changelog)
 CHANGELOG = [
+    (31, [u"الشاشة لا تتوقف أثناء التلاوة: رسم الآيات صار في الخلفية، والآية التالية تُجهّز قبل أن تُتلى",
+          u"تظليل الآية الجارية فقط عندما يكون توقيت التسجيل دقيقاً؛ وإلا يظهر رقمها بعلامة ≈ (تقريبي)",
+          u"تزامن أدق: يُقبل توقيت التلاوة حتى مع فرق بسيط في طول الملف، ويُصحَّح بالنسبة"]),
     (30, [u"شكل جديد بالكامل: الشاشة الرئيسية بثلاث لوحات وشريط «يعمل الآن» مع الآية الجارية",
           u"مظهر فاتح بشريط جانبي أخضر وبطاقة مصحف تتبع التلاوة",
           u"شاشة بداية جديدة: «متابعة الاستماع» والقراء والسور في بطاقات",
@@ -5461,10 +5658,13 @@ class Background(Hub16Bg, Hub17Bg, Hub18Bg, Hub19Bg, Hub21Bg):
             qlog("word now: %r" % (e,))
             return None
 
+    sync_scale = 1.0
+
     def exact_ayah(self, n):
         """Ayah from the official timing when this recording has one (name matches are checked
         against the length of the file, so another recording of the same reciter is not used)."""
         self.sync_exact = False
+        self.sync_scale = 1.0
         try:
             tl, matched = self.timing_for(n)
             if not tl:
@@ -5473,23 +5673,46 @@ class Background(Hub16Bg, Hub17Bg, Hub18Bg, Hub19Bg, Hub21Bg):
             if not pp:
                 return None
             pos, length = pp
-            if matched:
-                end = float(tl[-1][2]) or 1.0
-                if length <= 0 or abs(length * 1000.0 - end) / end > 0.04:
-                    return None
+            ms = pos * 1000.0
+            end = float(tl[-1][2]) or 1.0
+            if length > 0:
+                off = abs(length * 1000.0 - end) / end
+                if matched and off > 0.08:
+                    return None               # another recording of this reciter
+                if off > 0.005:
+                    ms = ms * end / (length * 1000.0)   # same recording, other encoding / silence at the ends
+                    self.sync_scale = length * 1000.0 / end
+            elif matched:
+                return None
             self.sync_exact = True
-            return data.ayah_from_timing(tl, pos * 1000.0)
+            return data.ayah_from_timing(tl, ms)
         except Exception as e:
             qlog("timing: %s" % e)
             return None
 
+    def verse_exact(self):
+        """Was the last verse_now() exact (ayah items, quran.com word timing, official timing)?
+        Otherwise it is only an estimate from the position in the file."""
+        return bool(self.verse_ok)
+
+    verse_ok = False
+
     def verse_now(self):
         """(surah, ayah) being recited (exact in the memorisation studio and for timed recordings,
-        estimated otherwise)."""
+        estimated otherwise).  verse_exact() tells which."""
+        self.verse_ok = False
+        r = self._verse_now()
+        if r and not self.verse_ok:
+            self.verse_ok = bool(self.sync_exact)
+        return r
+
+    def _verse_now(self):
+        self.sync_exact = False
         if not Player.active:
             return None
         item = self.pl[self.pi] if self.pl and 0 <= self.pi < len(self.pl) else {}
         if item.get("ayah"):
+            self.verse_ok = True
             return int(item["ayah"][0]), int(item["ayah"][1])
         if self.cur_live:
             return None
@@ -8317,6 +8540,8 @@ class QuranHub(Screen):
         self.qh_np_card = None
         self.qh_np_state = None
         self.qh_np_timer, self._cnp = make_timer(self.v3_np)
+        self.qh_card_rng = None
+        self.qh_np_shown = None
 
     def v3_start(self):
         th = THEMES[BG.theme_idx()]
@@ -8402,7 +8627,10 @@ class QuranHub(Screen):
             title = u"%s · %s" % (name, rec) if name else (rec or Player.cur_title or u"")
             parts = []
             if cur:
-                parts.append(u"الآية %d من %d" % (cur[1], studio.ayah_counts()[cur[0] - 1]))
+                if BG.verse_exact():
+                    parts.append(u"الآية %d من %d" % (cur[1], studio.ayah_counts()[cur[0] - 1]))
+                else:
+                    parts.append(u"الآية ≈%d من %d (تقريبي)" % (cur[1], studio.ayah_counts()[cur[0] - 1]))
             if BG.cur_live:
                 parts.append(u"بث مباشر")
             ext = os.path.splitext((BG.real_url(BG.cur_url) or u"").split("?")[0])[1].lstrip(".").upper()
@@ -8441,110 +8669,101 @@ class QuranHub(Screen):
                         self["qh_np_btn"].show()
                 except Exception:
                     pass
-        if cur != self.qh_np_verse or force:
-            self.qh_np_verse = cur
+        vkey = (cur, BG.verse_exact() if cur else False)
+        if vkey != self.qh_np_verse or force:
+            self.qh_np_verse = vkey
             if light:
                 self.v3_card(cur)
             else:
                 self.v3_ayah(cur)
 
     def v3_ayah(self, cur):
-        """The ayah being recited, centred in the now-playing bar."""
+        """The ayah being recited, centred in the now-playing bar - only when the timing of this
+        recording is exact (an estimate would show the wrong ayah).  Drawn by the painter thread."""
         try:
-            if not cur or not img_text():
+            if not cur or not img_text() or not BG.verse_exact():
+                self.qh_np_shown = None
+                painter().drop(("np", id(self)))
                 return self["qh_np_ayah"].hide()
-            n, a = cur
-            words = extras.sanitize(dict(extras.local_verses(n) or []).get(a, u"")).split()
+            th = THEMES[BG.theme_idx()]
+            col, tj = th["ayah"], tajweed_on()
             h = p(50)
             px = int(h / 1.85)
             lim = p(780) - p(20)
-            out = []
-            for w_ in words:
-                if qtext.line_width(u" ".join(out + [w_, u"﴿%s﴾" % extras.ar_num(a)]), px) > lim:
-                    out.append(u"…")
-                    break
-                out.append(w_)
-            text = u" ".join(out) + u" ﴿%s﴾" % extras.ar_num(a)
-            th = THEMES[BG.theme_idx()]
-            pix, iw = text_pixmap(text, px, th["ayah"], h, line_tajweed(text) if tajweed_on() else None)
-            if pix is None:
-                return self["qh_np_ayah"].hide()
-            self["qh_np_ayah"].instance.setPixmap(pix)
-            self["qh_np_ayah"].instance.resize(eSize(iw, h))
-            self["qh_np_ayah"].instance.move(ePoint(p(84) + max(0, (p(780) - iw) // 2), p(576)))
-            self["qh_np_ayah"].show()
+            n, a = cur
+
+            def work(n=n, a=a):
+                spec = np_ayah_spec(n, a, px, col, h, lim, tj)
+                draw_lines([spec])
+                if a < studio.ayah_counts()[n - 1]:    # the next one is ready before it is recited
+                    draw_lines([np_ayah_spec(n, a + 1, px, col, h, lim, tj)])
+                return spec
+            painter().ask(("np", id(self)), work, self._v3_ayah_show)
         except Exception as e:
             qlog("np ayah: %r" % (e,))
 
+    def _v3_ayah_show(self, spec):
+        h = spec[3]
+        pix, iw = text_pixmap(*spec)
+        if pix is None:
+            return self["qh_np_ayah"].hide()
+        self["qh_np_ayah"].instance.setPixmap(pix)
+        self["qh_np_ayah"].instance.resize(eSize(iw, h))
+        self["qh_np_ayah"].instance.move(ePoint(p(84) + max(0, (p(780) - iw) // 2), p(576)))
+        self["qh_np_ayah"].show()
+
     def v3_card(self, cur):
-        """Light look: the surah title on the green band and six lines from the current ayah on,
-        the ayah being recited in the theme colour."""
+        """Light look: the surah title on the green band and six lines of the mushaf.  The window stays
+        where it is while the recited ayah is inside it (nothing is redrawn), the ayah is coloured only
+        when the timing is exact, and the drawing is done by the painter thread."""
         th = THEMES[BG.theme_idx()]
         try:
             if not img_text():
                 return
             n, a = cur if cur else ((BG.cfg.get("reader_pos") or {}).get("n") or 1, 0)
-            key = (n, a)
+            hi = a if (cur and BG.verse_exact()) else 0
+            rng = self.qh_card_rng
+            if rng and rng[0] == n and a and rng[1] <= a <= rng[2]:
+                first = rng[1]
+            else:
+                first = max(1, a) if a else 1
+            key = (n, first, hi)
             if key == self.qh_np_card:
                 return
             self.qh_np_card = key
-            hT = p(58)
-            pix, iw = text_pixmap(u"سُورَةُ %s" % data.surah_name(n), int(hT / 1.85), 0xf4ecd2, hT)
-            if pix is not None:
-                self["qh_card_title"].instance.setPixmap(pix)
-                self["qh_card_title"].instance.resize(eSize(iw, hT))
-                self["qh_card_title"].instance.move(ePoint(p(66) + max(0, (p(358) - iw) // 2), p(140)))
-                self["qh_card_title"].show()
-            verses = extras.local_verses(n) or []
-            first = max(1, a - 1) if a else 1
-            words = []
-            for vn, vt in verses:
-                if vn < first:
-                    continue
-                for w_ in extras.sanitize(vt).split():
-                    words.append((w_, vn))
-                words.append((u"﴿%s﴾" % extras.ar_num(vn), vn))
-                if len(words) > 120:
-                    break
-            h = p(60)
-            px = int(h / 1.85)
-            lim = p(382) - p(8)
-            lines, curl = [], []
-            for w_, vn in words:
-                trial = u" ".join(x for x, _v in curl + [(w_, vn)])
-                if curl and qtext.line_width(trial, px) > lim:
-                    lines.append(curl)
-                    curl = []
-                    if len(lines) == 6:
-                        break
-                curl.append((w_, vn))
-            if curl and len(lines) < 6:
-                lines.append(curl)
-            hi = _rgbint(th["sel"])
-            base = _rgbint(th["text"])
-            for i in range(6):
-                wname = "qh_card_l%d" % i
-                if i >= len(lines):
-                    self[wname].hide()
-                    continue
-                ln = lines[i]
-                text = u" ".join(x for x, _v in ln)
-                colors, pos = {}, 0
-                for x, vn in ln:
-                    if a and vn == a:
-                        for k in range(pos, pos + len(x)):
-                            colors[k] = hi
-                    pos += len(x) + 1
-                pix, iw = text_pixmap(text, px, base, h, colors or None)
-                if pix is None:
-                    self[wname].hide()
-                    continue
-                self[wname].instance.setPixmap(pix)
-                self[wname].instance.resize(eSize(iw, h))
-                self[wname].instance.move(ePoint(p(54) + max(0, (p(382) - iw) // 2), p(212) + i * p(62)))
-                self[wname].show()
+            hc, base = _rgbint(th["sel"]), _rgbint(th["text"])
+
+            def work(n=n, first=first, hi=hi):
+                out = card_specs(n, first, hi, hc, base)
+                draw_lines([out["title"]] + out["lines"])
+                return out
+            painter().ask(("card", id(self)), work, self._v3_card_show)
         except Exception as e:
             qlog("card: %r" % (e,))
+
+    def _v3_card_show(self, out):
+        self.qh_card_rng = (out["n"], out["first"], out["last"])
+        spec = out["title"]
+        pix, iw = text_pixmap(*spec)
+        if pix is not None:
+            self["qh_card_title"].instance.setPixmap(pix)
+            self["qh_card_title"].instance.resize(eSize(iw, spec[3]))
+            self["qh_card_title"].instance.move(ePoint(p(66) + max(0, (p(358) - iw) // 2), p(140)))
+            self["qh_card_title"].show()
+        for i in range(6):
+            wname = "qh_card_l%d" % i
+            if i >= len(out["lines"]):
+                self[wname].hide()
+                continue
+            spec = out["lines"][i]
+            pix, iw = text_pixmap(*spec)
+            if pix is None:
+                self[wname].hide()
+                continue
+            self[wname].instance.setPixmap(pix)
+            self[wname].instance.resize(eSize(iw, spec[3]))
+            self[wname].instance.move(ePoint(p(54) + max(0, (p(382) - iw) // 2), p(212) + i * p(62)))
+            self[wname].show()
 
 
     def qh_highlight(self, item):
@@ -11616,6 +11835,8 @@ class QHPlayer(Screen):
         self.qp_title = None
         self.qp_img = None
         self.qp_verse = None
+        self.qp_rng = None
+        self.qp_drawn = None
         self.qp_wave_pct = None
         self.qp_paused = None
         self.qp_runner = Runner()
@@ -11708,6 +11929,8 @@ class QHPlayer(Screen):
     def cleanup(self):
         self.qp_timer.stop()
         self.qp_runner.close()
+        for k in ("qp", "wave"):
+            painter().drop((k, id(self)))
         BG.show_minibar()
 
     def seek(self, s):
@@ -11798,13 +12021,11 @@ class QHPlayer(Screen):
         self["qp_t1"].setText(BG._mmss(int(pp[1])) if pp and pp[1] > 0 else u"")
         self["qp_t2"].setText(BG._mmss(int(pp[0])) if pp else (txt or u""))
         self["qp_time"].setText(txt or u"")
-        q = int(pct / 2) * 2
+        q = int(pct / 4) * 4
         if q != self.qp_wave_pct or force:
             self.qp_wave_pct = q
-            pix = ui_pix(ui.waveform, p(396), p(56), 44, q / 100.0, _hex(th["gold"]), th.get("track", "#2a3442"))
-            if pix is not None:
-                self["qp_wave"].instance.setPixmap(pix)
-                self["qp_wave"].show()
+            args = (p(396), p(56), 44, q / 100.0, _hex(th["gold"]), th.get("track", "#2a3442"))
+            painter().ask(("wave", id(self)), lambda a=args: ui_png(ui.waveform, *a), lambda _r, a=args: self.wave_show(a))
         paused = BG.is_paused() or not Player.active
         if paused != self.qp_paused or force:
             self.qp_paused = paused
@@ -11826,43 +12047,92 @@ class QHPlayer(Screen):
         self.show_verse(cur)
 
     def show_verse(self, cur=None):
-        """The surah card: seven ayat around the one being recited (that one highlighted) + its tafsir."""
+        """The surah card: seven ayat around the one being recited + its tafsir.  The window stays put
+        while the recited ayah is inside it; the ayah is coloured gold only when the timing of the
+        recording is exact (otherwise it is an estimate and is marked "≈"); every line is drawn by the
+        painter thread and the next ayah is drawn before it is recited, so the screen never stops."""
         try:
-            if cur == self.qp_verse:
+            exact = bool(cur) and BG.verse_exact()
+            state = (cur, exact)
+            if state == self.qp_verse:
                 return
-            self.qp_verse = cur
+            self.qp_verse = state
             th = self.qp_th
             if not cur:
+                painter().drop(("qp", id(self)))
+                self.qp_rng = None
                 self["qp_ayah"].setList([])
                 self["qp_title"].hide()
                 self["qp_tf_title"].setText(i18n.T(u"التفسير"))
                 self["qp_tf_text"].setText(i18n.T(u"يظهر هنا تفسير الآية التي تُتلى (مع السور).") if Player.active else u"")
                 return
             n, a = cur
-            hT = p(76)
-            pix, iw = text_pixmap(u"سُورَةُ %s" % data.surah_name(n), int(hT / 1.85), th["gold"], hT)
-            if pix is not None:
-                self["qp_title"].instance.setPixmap(pix)
-                self["qp_title"].instance.resize(eSize(iw, hT))
-                self["qp_title"].instance.move(ePoint(p(868) - iw // 2, p(98)))
-                self["qp_title"].show()
-            verses = dict(extras.local_verses(n) or [])
             total = studio.ayah_counts()[n - 1]
-            first = max(1, min(a - 3, total - self.VROWS + 1))
-            w, h = p(716), p(63)
-            rows = []
-            for k in range(first, min(total, first + self.VROWS - 1) + 1):
-                rows.append(self.verse_row(n, k, verses.get(k, u""), k == a, w, h))
-            self["qp_ayah"].setList(rows)
-            try:
-                self["qp_ayah"].moveToIndex(a - first)
-            except Exception:
-                pass
-            self.tafsir_of(n, a)
+            rng = self.qp_rng
+            if rng and rng[0] == n and rng[1] <= a <= rng[1] + self.VROWS - 2:
+                first = rng[1]
+            else:
+                first = max(1, min(a - 1, total - self.VROWS + 1))
+            hi = a if exact else 0
+            key = (n, first, hi)
+            self.qp_mark(n, a, first, exact)
+            if key == self.qp_drawn:
+                return
+            gold, dim = th.get("ayah", 0xf2e6c4), _rgbint(th["dim"])
+            tj = tajweed_on()
+            avail = p(716) - p(44) - p(14) - p(24)
+            tkey = BG.cfg.get("tafsir") or "muyassar"
+            gold_t = th["gold"]
+
+            def work(n=n, a=a, first=first, hi=hi):
+                specs = player_specs(n, first, total, self.VROWS, hi, gold, dim, tj, avail)
+                hT = p(76)
+                title = (u"سُورَةُ %s" % data.surah_name(n), int(hT / 1.85), gold_t, hT, None)
+                draw_lines([title] + [sp for _k, sp in specs])
+                taf = tafsir_text(tkey, n, a)
+                if hi and hi < total:          # the next ayah, coloured, and this one back to dim
+                    nxt = player_specs(n, first, total, self.VROWS, hi + 1, gold, dim, tj, avail, only=(hi, hi + 1))
+                    draw_lines([sp for _k, sp in nxt])
+                return {"key": (n, first, hi), "n": n, "a": a, "first": first, "rows": specs, "title": title, "taf": taf}
+            painter().ask(("qp", id(self)), work, self._verse_show)
         except Exception as e:
             qlog("player verse: %r" % (e,))
 
-    def verse_row(self, n, k, text, current, w, h):
+    def qp_mark(self, n, a, first, exact):
+        """Move the band to the recited ayah (no drawing) and write the tafsir title."""
+        try:
+            if self.qp_rng and self.qp_rng[0] == n and self.qp_rng[1] == first:
+                self["qp_ayah"].moveToIndex(max(0, a - first))
+        except Exception:
+            pass
+        self["qp_tf_title"].setText(u"%s · %s %s%d" % (i18n.T(u"التفسير"), i18n.T(u"الآية"), u"" if exact else u"≈", a))
+
+    def _verse_show(self, out):
+        th = self.qp_th
+        self.qp_drawn = out["key"]
+        n, a, first = out["n"], out["a"], out["first"]
+        spec = out["title"]
+        pix, iw = text_pixmap(*spec)
+        if pix is not None:
+            self["qp_title"].instance.setPixmap(pix)
+            self["qp_title"].instance.resize(eSize(iw, spec[3]))
+            self["qp_title"].instance.move(ePoint(p(868) - iw // 2, p(98)))
+            self["qp_title"].show()
+        hi = out["key"][2]
+        w, h = p(716), p(63)
+        rows = [self.verse_row(n, k, sp, k == hi, w, h) for k, sp in out["rows"]]
+        self.qp_rng = (n, first)
+        self["qp_ayah"].setList(rows)
+        cur = BG.verse_now() if Player.active else None
+        if cur and cur[0] == n:
+            a = cur[1]
+        try:
+            self["qp_ayah"].moveToIndex(max(0, min(len(rows) - 1, a - first)))
+        except Exception:
+            pass
+        self.tafsir_show(out["taf"])
+
+    def verse_row(self, n, k, spec, current, w, h):
         th = self.qp_th
         d = p(44)
         ring = ui_pix(ui.ringdisc, d, th["panel"], _hex(th["gold"]) if current else th.get("numb", "#3a4554"), max(1, p(2)))
@@ -11874,39 +12144,22 @@ class QHPlayer(Screen):
         row.append(MultiContentEntryText(pos=(x0, (h - d) // 2), size=(d, d), font=1, flags=RT_HALIGN_CENTER | RT_VALIGN_CENTER,
                                          text=u"%d" % k, color=num_col, color_sel=num_col))
         avail = x0 - p(24)
-        hh = p(54)
-        px = int(hh / 1.85)
-        words = extras.sanitize(text).split()
-        out = []
-        for w_ in words:
-            if qtext.line_width(u" ".join(out + [w_]), px) > avail - p(30):
-                out.append(u"…")
-                break
-            out.append(w_)
-        line = u" ".join(out)
-        col = th.get("ayah", 0xf2e6c4) if current else _rgbint(th["dim"])
-        row += img_entry(line, avail, h, col, px=px, colors=(line_tajweed(line) if current and tajweed_on() else None))
+        text, px, col, _h, colors = spec
+        row += img_entry(text, avail, h, col, px=px, colors=colors)
         return row
 
-    def tafsir_of(self, n, a):
+    def wave_show(self, args):
+        pix = ui_pix(ui.waveform, *args)
+        if pix is not None:
+            self["qp_wave"].instance.setPixmap(pix)
+            self["qp_wave"].show()
+
+    def tafsir_show(self, t):
         key = BG.cfg.get("tafsir") or "muyassar"
         names = dict((k, nm) for k, nm, _a, _b, _c, _d in extras.TAFSIRS)
-        self["qp_tf_title"].setText(u"%s · %s %d" % (i18n.T(u"التفسير"), i18n.T(u"الآية"), a))
         self["qp_tf_name"].setText(names.get(key, names["muyassar"]))
-        try:
-            arr = extras.local_tafsir(key, n) or extras.local_tafsir("muyassar", n)
-            t = u""
-            if isinstance(arr, list) and 0 < a <= len(arr):
-                t = arr[a - 1]
-            elif isinstance(arr, dict):
-                t = arr.get(str(a)) or u""
-            if u"[التفسير]" in t:
-                t = t.split(u"[التفسير]", 1)[1]
-            t = u" ".join(t.split())
-            self["qp_tf_text"].setText(t[:240] + (u"…" if len(t) > 240 else u"") if t else
-                                       i18n.T(u"التفسير غير موجود على الجهاز لهذه السورة"))
-        except Exception as e:
-            qlog("player tafsir: %r" % (e,))
+        self["qp_tf_text"].setText(t[:240] + (u"…" if len(t) > 240 else u"") if t else
+                                   i18n.T(u"التفسير غير موجود على الجهاز لهذه السورة"))
 
     def img_loaded(self, path, rec):
         if isinstance(path, Exception) or not path or rec != self.qp_img:

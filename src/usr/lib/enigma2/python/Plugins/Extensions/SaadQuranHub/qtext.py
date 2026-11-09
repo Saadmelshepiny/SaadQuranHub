@@ -14,6 +14,7 @@ import hashlib
 import json
 import os
 import struct
+import threading
 import zlib
 
 from . import extras
@@ -532,6 +533,25 @@ def render(text, px, color=0xffffff, height=None, colors=None, justify=None):
                 return dp, w, h
         except Exception:
             pass
+    with _DRAW:                          # the GUI and the painter thread never draw at the same time
+        meta = _META.get(path)
+        if meta and os.path.exists(path):
+            return path, meta[0], meta[1]
+        return _draw(text, px, color, height, colors, justify, name, path, dd)
+
+
+_DRAW = threading.RLock()
+
+
+def is_ready(text, px, color=0xffffff, height=None, colors=None, justify=None):
+    """Is this line already drawn in /tmp (then render() is instant)?"""
+    ck = u",".join(u"%d:%x" % kv for kv in sorted(colors.items())) if colors else u""
+    key = hashlib.md5((u"%s|%d|%x|%s|%s|%s" % (text, px, color, height, ck, justify)).encode("utf-8")).hexdigest()
+    path = os.path.join(CACHE_DIR, key + ".png")
+    return path in _META and os.path.exists(path)
+
+
+def _draw(text, px, color, height, colors, justify, name, path, dd):
     w, h, alpha, cbuf, pal = compose(text, px, height, colors, justify)
     if not os.path.isdir(CACHE_DIR):
         os.makedirs(CACHE_DIR)
