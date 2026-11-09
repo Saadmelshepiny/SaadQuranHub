@@ -1,8 +1,8 @@
 {
-  "version": "1.4",
-  "ipk": "https://raw.githubusercontent.com/Saadmelshepiny/SaadQuranHub/main/ipk/enigma2-plugin-extensions-saadquranhub_1.4_all.ipk",
-  "sha256": "d1326b68721bcc9715c3383d08bed9bd51e7626d7928ac0fa220ca28a2f032fa",
-  "ipk_lite": "https://raw.githubusercontent.com/Saadmelshepiny/SaadQuranHub/main/ipk/enigma2-plugin-extensions-saadquranhub-lite_1.4_all.ipk",
-  "sha256_lite": "f74f301b71588af3feeefe22c573eb322f8898e62af5104c07b66e5513936bb9",
-  "notes": "معالج أول تشغيل • بحث في القوائم • الإبلاغ عن مشكلة بكود QR • فرنسي وتركي وأردو • الترجمة والتفسير الصوتي • قوائم جاهزة • المصحف على الجوال • تشغيل في كل الغرف • حزمة خفيفة"
+  "version": "2.0",
+  "ipk": "https://raw.githubusercontent.com/Saadmelshepiny/SaadQuranHub/main/ipk/enigma2-plugin-extensions-saadquranhub_2.0_all.ipk",
+  "sha256": "b719b18ff0114aee027605fdc41267cd8f2c09938e377fe95b59d5abe114bcdc",
+  "ipk_lite": "https://raw.githubusercontent.com/Saadmelshepiny/SaadQuranHub/main/ipk/enigma2-plugin-extensions-saadquranhub-lite_2.0_all.ipk",
+  "sha256_lite": "8125e8eda2c41c8f8366bbc533c7def46a78009b73c587c6324667304a3073fa",
+  "notes": "شكل جديد بالكامل: ثلاث لوحات وشريط «يعمل الآن» • مظهر فاتح مع بطاقة المصحف • شاشة بداية «متابعة الاستماع» • شاشة تشغيل بالآيات والتفسير"
 }

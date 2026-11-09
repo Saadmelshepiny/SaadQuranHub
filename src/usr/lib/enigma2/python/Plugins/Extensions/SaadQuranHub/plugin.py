@@ -60,7 +60,7 @@ from Components.ProgressBar import ProgressBar
 from Components.Pixmap import Pixmap
 from enigma import (eTimer, eServiceReference, iPlayableService, getDesktop, eSize, ePoint,
                     eListboxPythonMultiContent, gFont,
-                    RT_HALIGN_RIGHT, RT_HALIGN_CENTER, RT_VALIGN_CENTER)
+                    RT_HALIGN_RIGHT, RT_HALIGN_CENTER, RT_HALIGN_LEFT, RT_VALIGN_CENTER)
 
 try:
     from skin import parseColor
@@ -84,8 +84,9 @@ from . import dlna
 from . import safeupdate
 from . import packs
 from . import house
+from . import ui
 
-PLUGIN_VERSION = "1.4"
+PLUGIN_VERSION = "2.0"
 GITHUB_REPO = "Saadmelshepiny/SaadQuranHub"
 GITHUB_INFO = "https://raw.githubusercontent.com/%s/main/version.json" % GITHUB_REPO
 
@@ -329,88 +330,41 @@ def _T(name, bg, bar, line, panel, head, sel, text, dim, btn2, gold, grey, btntx
             "btntxt": btntxt, "layout": layout, "accent": accent}
 
 
+def _V(name, layout, bg, bar, line, panel, head, sel, text, dim, gold, grey, btntxt="#eceff3", **more):
+    """3.0 themes (the four mock-ups).  The old keys stay, so every other screen keeps working."""
+    t = _T(name, bg, bar, line, panel, head, sel, text, dim, panel, gold, grey, btntxt=btntxt, layout=layout)
+    t.update(more)
+    return t
+
+
 THEMES = [
-    _T(u"زمردي ليلي", "#0e1116", "#0f5132", "#e0b95a", "#151b23", "#1f2933", "#1b7a4b",
-       "#d7dde5", "#9aa5b1", "#2b3440", 0xffd166, 0x8b95a1),
-    _T(u"دافئ (للعين)", "#15110e", "#4a3320", "#d9a441", "#1d1813", "#2c2319", "#8a5a1f",
-       "#e6dccb", "#a89a84", "#3a2f23", 0xe8b85c, 0x9c8f7a),
-    _T(u"أزرق هادئ", "#0d1520", "#16324f", "#7fb4e8", "#121e2c", "#1b2b3d", "#2b6a9e",
-       "#d3dde8", "#93a4b8", "#243447", 0x9cc6f0, 0x8393a6),
-    _T(u"بنفسجي ليلي", "#120f1a", "#3b2a63", "#b99cf0", "#1a1625", "#271f38", "#6a4bb0",
-       "#ddd6ec", "#a198b8", "#2f2744", 0xcbb4f5, 0x978fab),
-    _T(u"رمادي فحمي", "#121314", "#2c3136", "#c3c9cf", "#1a1c1e", "#25282b", "#4a5560",
-       "#d4d7da", "#9a9fa4", "#2d3033", 0xd9dde1, 0x8b9096),
-    _T(u"غابة هادئة", "#0f1511", "#24472f", "#a9c97b", "#161e18", "#212d24", "#3b7a4a",
-       "#d5e0d2", "#9fb0a0", "#2a362c", 0xc2d98f, 0x8da08e),
-    _T(u"فاتح رملي (نهاري)", "#efe8d8", "#2f6f4f", "#c9a24d", "#faf5e8", "#e2d8bf", "#2f7d57",
-       "#2b2b26", "#5b5a52", "#cdbf9f", 0x8a6410, 0x6b6a60, btntxt="#23211a"),
-    _T(u"أسود عميق (OLED)", "#050608", "#0b3a26", "#c9a24d", "#0a0c0f", "#14181d", "#17603b",
-       "#cfd5dc", "#8a929b", "#1a1f26", 0xe0b95a, 0x7d8690),
-    # ---- translucent / distinctive layouts
-    _T(u"لوحة جانبية زمردية (شفافة)", "transparent", "#c0103a2a", "#3ad08f", "#a0101820", "#d0143a2a", "#c01b7a4b",
-       "#e4ece8", "#a9b8b0", "#c0123026", 0x7ee0b0, 0x93a69c, layout=1),
-    _T(u"لوحة جانبية زرقاء (شفافة)", "transparent", "#c0102a44", "#6fb4f0", "#a00c1622", "#d0163352", "#c02b6a9e",
-       "#e1ebf5", "#a0b3c6", "#c0152638", 0xa8d2f7, 0x8497ab, layout=1),
-    _T(u"لوحة جانبية ذهبية (شفافة)", "transparent", "#c03a2c12", "#e0b95a", "#a0181208", "#d03a2c12", "#c08a5a1f",
-       "#efe6d3", "#b7a98e", "#c02a2010", 0xf0cd7a, 0xa09580, layout=1),
-    _T(u"زجاج أسود (شفاف كامل)", "transparent", "#b0000000", "#d9b45a", "#90000000", "#c0101418", "#c01b7a4b",
-       "#f0f0f0", "#b5bcc4", "#b0000000", 0xffd166, 0x9aa3ad, layout=2),
-    _T(u"زجاج أزرق ليلي", "transparent", "#b0081a30", "#74b4ee", "#90081420", "#c0102840", "#c02b6a9e",
-       "#e8f0f8", "#a9bad0", "#b0081a30", 0xa8d2f7, 0x8ea0b6, layout=2),
-    _T(u"شريط سفلي زمردي", "transparent", "#b00f5132", "#e0b95a", "#b0101820", "#d01f3d33", "#d01b7a4b",
-       "#e2ece7", "#a9b8b0", "#b01a2a26", 0xffd166, 0x90a398, layout=3),
-    _T(u"شريط سفلي بنفسجي", "transparent", "#b02a1c4c", "#c8b0f5", "#b0140f22", "#d0271f38", "#d06a4bb0",
-       "#ece6f7", "#b0a6c8", "#b01c1530", 0xd9c6fa, 0x9f97b3, layout=3),
-    _T(u"ضباب فاتح (لوحة جانبية)", "transparent", "#c8e9efe9", "#1f7a50", "#c0f5f8f3", "#d0dfe9df", "#d02f7d57",
-       "#1d2b24", "#4f6158", "#c0cfdccf", 0x7a5a0c, 0x55665c, btntxt="#16231c", layout=1),
-    # ---- modern additions
-    _T(u"لوحة يسارية زمردية", "transparent", "#c0103a2a", "#3ad08f", "#a0101820", "#d0143a2a", "#c01b7a4b",
-       "#e4ece8", "#a9b8b0", "#c0123026", 0x7ee0b0, 0x93a69c, layout=4),
-    _T(u"لوحة يسارية عنبرية", "transparent", "#c03a2412", "#f0a24a", "#a0180f08", "#d03a2412", "#c0a8581c",
-       "#f1e5d3", "#bba98f", "#c02a1c0e", 0xf5c37a, 0xa39683, layout=4),
-    _T(u"نافذة مركزية زجاجية", "transparent", "#b8101820", "#74c0e8", "#90081018", "#d0182838", "#c02b6a9e",
-       "#eaf2f8", "#a9bccd", "#b8101c28", 0xa8d2f7, 0x8ea0b3, layout=5),
-    _T(u"نافذة مركزية ذهبية", "transparent", "#b8181208", "#e0b95a", "#90100c06", "#d0302410", "#c08a5a1f",
-       "#f2e9d6", "#b9ab90", "#b8201808", 0xf0cd7a, 0xa39880, layout=5),
-    _T(u"نافذة مركزية OLED", "transparent", "#e0000000", "#2fd08a", "#a0000000", "#e00b1511", "#d01b7a4b",
-       "#e8f2ec", "#9fb3a8", "#e0060a08", 0x7ee0b0, 0x8a9d92, layout=5),
-    _T(u"شريط علوي زمردي", "transparent", "#c00f3a2a", "#e0b95a", "#a0101820", "#d01f3d33", "#d01b7a4b",
-       "#e2ece7", "#a9b8b0", "#b01a2a26", 0xffd166, 0x90a398, layout=6),
-    _T(u"شريط علوي أزرق ليلي", "transparent", "#c0081a30", "#74b4ee", "#a0081420", "#d0102840", "#d02b6a9e",
-       "#e8f0f8", "#a9bad0", "#b0081a30", 0xa8d2f7, 0x8ea0b6, layout=6),
-    _T(u"نيون سماوي", "#05080d", "#06222e", "#2fe0ff", "#0a1118", "#0e2a38", "#0f6f8a",
-       "#d6eef5", "#7fa8b8", "#102431", 0x7ff0ff, 0x6f98a8),
-    _T(u"عنبر ملكي", "#120a05", "#4a2208", "#ffb347", "#1a1008", "#2d1a0c", "#9a5a14",
-       "#f1e1c9", "#b39a78", "#2e1c0d", 0xffc870, 0x9c8668),
-    # ---- more modern looks (accent line under the headers)
-    _T(u"ركن زمردي (نافذة صغيرة)", "transparent", "#c80e2e22", "#3ad08f", "#a0101820", "#d0143a2a", "#c01b7a4b",
-       "#e4ece8", "#a9b8b0", "#c0123026", 0x7ee0b0, 0x93a69c, layout=7, accent=True),
-    _T(u"ركن بنفسجي (نافذة صغيرة)", "transparent", "#c81a1230", "#b79cf5", "#a0120e1e", "#d0221a3a", "#c06a4bb0",
-       "#ece6f7", "#aea4c6", "#c01a1430", 0xd0bcf8, 0x9d95b2, layout=7, accent=True),
-    _T(u"ركن ذهبي (نافذة صغيرة)", "transparent", "#c8201608", "#e8b84e", "#a0140e06", "#d0302410", "#c08a5a1f",
-       "#f2e9d6", "#b9ab90", "#c01c1408", 0xf5d27e, 0xa39880, layout=7, accent=True),
-    _T(u"لوحة ياقوتية", "transparent", "#c0300e1a", "#ff7a98", "#a0180810", "#d0401428", "#c0a82a50",
-       "#f6e4ea", "#c4a4ae", "#c0260c16", 0xffa8bd, 0xa88c95, layout=1, accent=True),
-    _T(u"لوحة فيروزية", "transparent", "#c00a2e30", "#35e0d0", "#a0081a1c", "#d0103c40", "#c00f7f86",
-       "#dff6f4", "#9fc4c2", "#c00a2426", 0x7ff2e6, 0x86adab, layout=1, accent=True),
-    _T(u"لوحة يسارية بنفسجية", "transparent", "#c01e1440", "#b79cf5", "#a0100c22", "#d0261c48", "#c06a4bb0",
-       "#ece6f7", "#aea4c6", "#c0181036", 0xd0bcf8, 0x9d95b2, layout=4, accent=True),
-    _T(u"لوحة يسارية فيروزية", "transparent", "#c00a2e30", "#35e0d0", "#a0081a1c", "#d0103c40", "#c00f7f86",
-       "#dff6f4", "#9fc4c2", "#c00a2426", 0x7ff2e6, 0x86adab, layout=4, accent=True),
-    _T(u"نافذة مركزية بنفسجية", "transparent", "#b8140e28", "#b79cf5", "#900c0818", "#d01e1636", "#c06a4bb0",
-       "#ece6f7", "#aea4c6", "#b8160f2c", 0xd0bcf8, 0x9d95b2, layout=5, accent=True),
-    _T(u"نافذة مركزية ياقوتية", "transparent", "#b8240a14", "#ff7a98", "#90140610", "#d0381226", "#c0a82a50",
-       "#f6e4ea", "#c4a4ae", "#b81a0810", 0xffa8bd, 0xa88c95, layout=5, accent=True),
-    _T(u"شريط علوي ذهبي", "transparent", "#c0261a08", "#e8b84e", "#a0140e06", "#d0382a10", "#c08a5a1f",
-       "#f2e9d6", "#b9ab90", "#b01c1408", 0xf5d27e, 0xa39880, layout=6, accent=True),
-    _T(u"شريط علوي بنفسجي", "transparent", "#c0181030", "#b79cf5", "#a0100c22", "#d0261c48", "#d06a4bb0",
-       "#ece6f7", "#aea4c6", "#b0181036", 0xd0bcf8, 0x9d95b2, layout=6, accent=True),
-    _T(u"شريط سفلي أزرق", "transparent", "#b0081a30", "#74b4ee", "#a0081420", "#d0102840", "#d02b6a9e",
-       "#e8f0f8", "#a9bad0", "#b0081a30", 0xa8d2f7, 0x8ea0b6, layout=3, accent=True),
-    _T(u"ليلي ناعم (Slate)", "#0b0f14", "#141c26", "#5aa9ff", "#10161e", "#18222e", "#24508a",
-       "#dbe4ee", "#8d9bab", "#1a2430", 0x8cc4ff, 0x7c8a99, accent=True),
-    _T(u"كربون أخضر", "#08090a", "#0d1a12", "#39e58c", "#0e1210", "#15221a", "#127a48",
-       "#d9efe3", "#8fb3a0", "#13201a", 0x7bf0b4, 0x7ea08f, accent=True),
+    _V(u"زمردي ليلي", 8, "#0a1110", "#0d2a20", "#e3b65c", "#0f1916", "#0f1916", "#163528", "#e9efeb", "#8ea29a",
+       0xe3b65c, 0x8ea29a, border="#1c2b26", tile="#16261f", tileb="#2b5a45", search="#0f1d18", sel2="#1b5e45",
+       track="#22322c", numb="#2c3d36", numf=None, badge="#0b1310", ayah=0xf2e6c4, avatar="#5bd6a0",
+       hero="#11261e", hero2="#173a2d", art="#2f8f6a", accent2="#5bd6a0", chip="#18261f", card_focus="#183327",
+       taf="#12170e", tafb="#29321a", tile2="#3a2e10", vsel="#1f2a18"),
+    _V(u"ليلي ذهبي", 8, "#0b0f15", "#141d2a", "#e9c46a", "#111824", "#111824", "#25291a", "#e8edf2", "#8b96a5",
+       0xe9c46a, 0x8b96a5, border="#1d2735", tile="#1a2333", tileb="#344157", search="#121a26", sel2="#2f3a1e",
+       track="#243042", numb="#334055", numf=None, badge="#0b0f15", ayah=0xf4e7c3, avatar="#e9c46a",
+       hero="#131c29", hero2="#1a2536", art="#8a7440", accent2="#e9c46a", chip="#1a2230", card_focus="#1b2638",
+       taf="#151a10", tafb="#2d3219", tile2="#3a2e10", vsel="#25291a"),
+    _V(u"أسود (OLED)", 8, "#000000", "#0a1712", "#e3b65c", "#0a0c0e", "#0a0c0e", "#10281e", "#e6ebe8", "#848f8a",
+       0xe3b65c, 0x848f8a, border="#191d20", tile="#121816", tileb="#24463a", search="#0a0d0c", sel2="#14513a",
+       track="#1d2622", numb="#28322e", numf=None, badge="#000000", ayah=0xf2e6c4, avatar="#5bd6a0",
+       hero="#08130e", hero2="#0d1c15", art="#2f8f6a", accent2="#5bd6a0", chip="#111614", card_focus="#0f2219",
+       taf="#0a0d08", tafb="#1d2414", tile2="#2c230c", vsel="#161d10"),
+    _V(u"مصحف فاتح", 9, "#f4efe1", "#1d5a45", "#e3b65c", "#fffdf7", "#f4efe1", "#1d5a45", "#1f2a24", "#6b6a60",
+       0x8a6410, 0x6b6a60, btntxt="#ffffff", border="#ece3cc", track="#e6dcc4", numb="#d9cdb0", numf=None,
+       avatar="#efe6cf", side_sel="#f4efe1", side_line="#4a7f6b", paper="#fbf6ea", paper_line="#e2c98e",
+       tile="#1d5a45", tileb="#1d5a45", search="#ffffff", sel2="#1d5a45", badge="#1d5a45", ayah=0x1f2a24,
+       hero="#ffffff", hero2="#f6efdc", accent2="#1d5a45", chip="#efe6cf", card_focus="#ffffff", tile2="#efe6cf",
+       vsel="#f3e7c4"),
+    _V(u"فاتح كحلي", 9, "#f1f3f6", "#1e3a5f", "#e9c46a", "#ffffff", "#f1f3f6", "#1e3a5f", "#1b2430", "#5e6878",
+       0x8a6410, 0x5e6878, btntxt="#ffffff", border="#dfe4ec", track="#dde3eb", numb="#c9d2de", numf=None,
+       avatar="#e4e9f1", side_sel="#f1f3f6", side_line="#4a6386", paper="#fbfaf6", paper_line="#d9c48f",
+       tile="#1e3a5f", tileb="#1e3a5f", search="#ffffff", sel2="#1e3a5f", badge="#1e3a5f", ayah=0x1b2430,
+       hero="#ffffff", hero2="#eef2f7", accent2="#1e3a5f", chip="#e4e9f1", card_focus="#ffffff", tile2="#e4e9f1",
+       vsel="#e6ecf4"),
 ]
 
 
@@ -483,6 +437,10 @@ def _layout_geo(layout):
 def _build_skin(theme=0):
     global ROW_H, COL_W
     th = THEMES[theme % len(THEMES)]
+    if th["layout"] in (8, 9):                       # 3.0: the new look
+        v3_geo(th["layout"])
+        ROW_H, COL_W = GEO["rows"][1], GEO["col_w"]
+        return _skin_light(th) if th["layout"] == 9 else _skin_studio(th)
     g = _layout_geo(th["layout"])
     glass = th["bg"] == "transparent"
     GEO["col_w"] = [p(w) for _, w in g["cols"]]
@@ -541,6 +499,353 @@ def _build_skin(theme=0):
                p(g["sx"]), p(g["ny"]), p(g["sw"]), p(28), p(g["sf"] - 1), th["text"], th["bar"]))
     return u"""<screen name="QuranHub" position="0,0" size="%d,%d" flags="wfNoBorder" backgroundColor="%s" title="القرآن الكريم">
 %s%s%s%s%s</screen>""" % (W, H, th["bg"], extra, head, cols, foot, btn)
+
+
+# ================================================================== 3.0: the new look (from the four mock-ups)
+# layout 8 = "studio": header with search and clock, three rounded panels, now-playing bar, pill buttons
+# layout 9 = "light mushaf": green side bar with the sections, one white list card, a mushaf card
+V3_LAYOUTS = (8, 9)
+AR_DAYS = [u"الاثنين", u"الثلاثاء", u"الأربعاء", u"الخميس", u"الجمعة", u"السبت", u"الأحد"]
+AR_MONTHS = [u"يناير", u"فبراير", u"مارس", u"أبريل", u"مايو", u"يونيو", u"يوليو", u"أغسطس", u"سبتمبر",
+             u"أكتوبر", u"نوفمبر", u"ديسمبر"]
+V3_EXTRA = ("qh_sub", "qh_clock", "qh_date", "qh_search", "qh_c0", "qh_c1", "qh_c2",
+            "qh_np_title", "qh_np_sub", "qh_np_t1", "qh_np_t2", "qh_np_fill", "qh_card_rec", "qh_card_time")
+V3_PIX = ("qh_np_btn", "qh_np_ayah", "qh_card_title", "qh_card_fill") + tuple("qh_card_l%d" % i for i in range(6))
+
+
+def v3(th=None):
+    th = th or THEMES[BG.theme_idx()]
+    return th.get("layout") in V3_LAYOUTS
+
+
+def v3_date(ts=None):
+    lt = time.localtime(ts)
+    return u"%s %d %s" % (AR_DAYS[lt.tm_wday], lt.tm_mday, AR_MONTHS[lt.tm_mon - 1])
+
+
+def ui_png(kind, *args):
+    """A picture of the new look (made once, kept in /tmp/sqh_ui)."""
+    try:
+        return ui.cached(kind, *args)
+    except Exception as e:
+        qlog("ui %s: %r" % (kind.__name__, e))
+        return None
+
+
+_UIPIX = {}
+
+
+def ui_pix(kind, *args):
+    """Same, decoded for a list row (kept in memory: only a few dozen small pictures)."""
+    key = (kind.__name__,) + args
+    if key in _UIPIX:
+        return _UIPIX[key]
+    pix = None
+    path = ui_png(kind, *args)
+    if path:
+        try:
+            from Tools.LoadPixmap import LoadPixmap
+            pix = LoadPixmap(path)
+        except Exception as e:
+            qlog("ui pix: %r" % (e,))
+    _UIPIX[key] = pix
+    return pix
+
+
+def _w(name, x, y, w, h, font, fg, bg, halign="right", valign="center", z=3, extra=u'noWrap="1" '):
+    return (u'<widget name="%s" position="%d,%d" size="%d,%d" font="Regular;%d" halign="%s" valign="%s" '
+            u'foregroundColor="%s" backgroundColor="%s" transparent="1" zPosition="%d" %s/>\n'
+            % (name, p(x), p(y), p(w), p(h), p(font), halign, valign, fg, bg, z, extra))
+
+
+def _pixw(name, x, y, w, h, z=4):
+    return u'<widget name="%s" position="%d,%d" size="%d,%d" alphatest="blend" zPosition="%d" />\n' % (
+        name, p(x), p(y), p(w), p(h), z)
+
+
+def _hide(name, pix=False):
+    if pix:
+        return u'<widget name="%s" position="0,0" size="1,1" alphatest="blend" zPosition="-1" />\n' % name
+    return (u'<widget name="%s" position="0,0" size="1,1" font="Regular;10" foregroundColor="#000000" '
+            u'backgroundColor="#000000" transparent="1" zPosition="-1" />\n' % name)
+
+
+def _img(path, x, y, w, h, z=1):
+    if not path:
+        return u""
+    return u'<ePixmap pixmap="%s" position="%d,%d" size="%d,%d" alphatest="blend" zPosition="%d" />\n' % (
+        path, p(x), p(y), p(w), p(h), z)
+
+
+def _card_img(x, y, w, h, r, fill, border=None, bw=1, z=1):
+    return _img(ui_png(ui.card, p(w), p(h), p(r), fill, border, max(1, p(bw))), x, y, w, h, z)
+
+
+def _list(name, x, y, w, h, bg, fg, sel_png, z=3):
+    sp = (u' selectionPixmap="%s"' % sel_png) if sel_png else u""
+    return (u'<widget name="%s" position="%d,%d" size="%d,%d" scrollbarMode="showNever" backgroundColor="%s" '
+            u'foregroundColor="%s" backgroundColorSelected="%s" foregroundColorSelected="%s" transparent="1" '
+            u'zPosition="%d"%s />\n' % (name, p(x), p(y), p(w), p(h), bg, fg, bg, fg, z, sp))
+
+
+V3_BTN = (("qh_red", "#e05a52"), ("qh_green", "#3fbf73"), ("qh_yellow", "#e2b53a"), ("qh_blue", "#4d7cf0"))
+
+
+def _skin_studio(th):
+    """Mock-up 4: dark, three rounded panels, now-playing bar."""
+    W, H = p(1280), p(720)
+    o = [u'<screen name="QuranHub" position="0,0" size="%d,%d" flags="wfNoBorder" backgroundColor="%s" title="القرآن الكريم">\n'
+         % (W, H, th["bg"])]
+    bg, pan, brd, txt, dim, gold = th["bg"], th["panel"], th["border"], th["text"], th["dim"], _hex(th["gold"])
+    # header
+    o.append(_img(ui_png(ui.gear_tile, p(54), th["tile"], th["tileb"], gold), 1212, 16, 54, 54))
+    o.append(_w("qh_title", 830, 10, 372, 42, 32, txt, bg))
+    o.append(_w("qh_sub", 830, 50, 372, 24, 16, dim, bg))
+    o.append(_card_img(318, 16, 462, 48, 24, th["search"], brd, 1))
+    o.append(_img(ui_png(ui.search_icon, p(22), dim), 744, 29, 22, 22, 2))
+    o.append(_img(ui_png(ui.card, p(16), p(16), p(4), "#e2b53a"), 336, 32, 16, 16, 2))
+    o.append(_w("qh_search", 362, 18, 376, 44, 18, dim, th["search"]))
+    o.append(_w("qh_status", 318, 64, 462, 22, 14, gold, bg, halign="center"))
+    o.append(_w("qh_clock", 14, 8, 220, 44, 34, txt, bg, halign="left"))
+    o.append(_w("qh_date", 14, 50, 220, 24, 16, dim, bg, halign="left"))
+    o.append(_w("qh_rec", 236, 50, 80, 24, 15, "#ff8f8f", bg, halign="left"))
+    # three panels (sections | reciters | surahs)
+    cols = [(956, 310), (356, 588), (14, 330)]
+    rows = GEO["rows"]
+    for i, (x, w) in enumerate(cols):
+        o.append(_card_img(x, 88, w, 474, 20, pan, brd, 1, z=1))
+        small = i == 0
+        o.append(_w(HDRS[i], x + 20, 100, w - 40, 40 if not small else 30, 26 if not small else 18,
+                    txt if not small else dim, pan))
+        o.append(_w("qh_c%d" % i, x + 20, 104, w - 40, 32, 16, dim, pan, halign="left"))
+        top = 150 if not small else 136
+        sel = ui_png(ui.card, p(w - 24), rows[i], p(14), th["sel"] if i != 2 else th["sel2"],
+                     gold if i != 2 else None, max(1, p(2)))
+        o.append(_list(NAMES[i], x + 12, top, w - 24, 562 - top - 12, pan, txt, sel))
+    # now playing bar
+    o.append(_card_img(14, 572, 1252, 88, 20, pan, brd, 1, z=1))
+    o.append(_pixw("qh_np_btn", 1196, 588, 56, 56))
+    o.append(_w("qh_np_title", 880, 584, 306, 32, 22, txt, pan))
+    o.append(_w("qh_np_sub", 880, 616, 306, 26, 16, dim, pan))
+    o.append(_pixw("qh_np_ayah", 84, 576, 780, 50))
+    o.append(_w("qh_np_t1", 22, 626, 58, 26, 15, dim, pan, halign="left"))
+    o.append(_w("qh_np_t2", 866, 626, 60, 26, 15, dim, pan, halign="right"))
+    o.append(u'<eLabel position="%d,%d" size="%d,%d" backgroundColor="%s" zPosition="2" />\n' % (
+        p(84), p(637), p(780), max(2, p(4)), th["track"]))
+    o.append(u'<widget name="qh_np_fill" position="%d,%d" size="%d,%d" backgroundColor="%s" zPosition="3" />\n' % (
+        p(864), p(637), p(2), max(2, p(4)), gold))
+    # buttons and chips
+    for i, (name, col) in enumerate(V3_BTN):
+        x = 1066 - i * 210
+        o.append(_card_img(x, 670, 200, 38, 12, pan, brd, 1, z=1))
+        o.append(_img(ui_png(ui.dot, p(12), col), x + 168, 683, 12, 12, 2))
+        o.append(_w(name, x + 10, 670, 150, 38, 18, txt, pan, halign="center"))
+    for i, name in enumerate(("qh_theme", "qh_sleep", "qh_fmt")):
+        x = 14 + i * 140
+        o.append(_card_img(x, 670, 132, 38, 12, pan, brd, 1, z=1))
+        o.append(_w(name, x + 6, 670, 120, 38, 14, dim, pan, halign="center"))
+    for name in ("qh_now", "qh_net", "qh_tv", "qh_fav", "qh_recbtn", "qh_card_rec", "qh_card_time", "qh_card_fill"):
+        o.append(_hide(name))
+    for name in ("qh_card_title",) + tuple("qh_card_l%d" % i for i in range(6)):
+        o.append(_hide(name, True))
+    o.append(u"</screen>")
+    return u"".join(o)
+
+
+def _skin_light(th):
+    """Mock-up 2: light, green side bar with the sections, a list card and a mushaf card."""
+    W, H = p(1280), p(720)
+    bg, side, txt, dim, gold = th["bg"], th["bar"], th["text"], th["dim"], _hex(th["gold"])
+    card, brd = th["panel"], th["border"]
+    rows = GEO["rows"]
+    o = [u'<screen name="QuranHub" position="0,0" size="%d,%d" flags="wfNoBorder" backgroundColor="%s" title="القرآن الكريم">\n'
+         % (W, H, bg)]
+    # side bar
+    o.append(u'<eLabel position="%d,0" size="%d,%d" backgroundColor="%s" zPosition="0" />\n' % (p(1026), p(254), H, side))
+    o.append(_img(ui_png(ui.gear_tile, p(46), side, side, th["line"]), 1214, 30, 46, 46))
+    o.append(_w("qh_title", 1040, 16, 170, 74, 26, "#ffffff", side, valign="center"))
+    sel0 = ui_png(ui.card, p(226), rows[0], p(14), th["side_sel"], None, 1)
+    o.append(_list(NAMES[0], 1040, 112, 226, 520, side, "#ffffff", sel0))
+    o.append(_card_img(1040, 648, 226, 54, 14, side, th["side_line"], 1, z=1))
+    o.append(_w("qh_theme", 1050, 648, 100, 54, 14, "#e8efe9", side, halign="center"))
+    o.append(_w("qh_sleep", 1150, 648, 106, 54, 14, "#e8efe9", side, halign="center"))
+    # titles and search
+    o.append(_w(HDRS[1], 420, 18, 590, 54, 36, txt, bg))
+    o.append(_w("qh_c1", 420, 72, 590, 28, 17, dim, bg))
+    o.append(_card_img(30, 34, 320, 50, 25, "#ffffff", brd, 1))
+    o.append(_img(ui_png(ui.search_icon, p(22), dim), 312, 48, 22, 22, 2))
+    o.append(_w("qh_search", 50, 34, 254, 50, 18, dim, "#ffffff"))
+    o.append(_w("qh_status", 30, 86, 380, 22, 15, gold, bg, halign="center"))
+    # the list card (reciters, then surahs in the same place)
+    o.append(_card_img(482, 110, 520, 528, 26, card, brd, 1, z=1))
+    sel1 = ui_png(ui.card, p(492), rows[1], p(16), th["sel"], None, 1)
+    o.append(_list(NAMES[1], 496, 124, 492, 500, card, txt, sel1))
+    sel2 = ui_png(ui.card, p(492), rows[2], p(16), th["sel"], None, 1)
+    o.append(_list(NAMES[2], 496, 124, 492, 500, card, txt, sel2))
+    # the mushaf card
+    o.append(_img(ui_png(ui.card2, p(430), p(528), p(24), th["paper"], gold, th["paper_line"], p(12)), 30, 110, 430, 528, 1))
+    o.append(_card_img(56, 136, 378, 66, 16, side, None, 1, z=2))
+    o.append(_pixw("qh_card_title", 66, 140, 358, 58))
+    for i in range(6):
+        o.append(_pixw("qh_card_l%d" % i, 54, 212 + i * 62, 382, 60))
+    o.append(_w("qh_card_rec", 290, 590, 144, 30, 15, dim, th["paper"]))
+    o.append(u'<eLabel position="%d,%d" size="%d,%d" backgroundColor="%s" zPosition="2" />\n' % (
+        p(170), p(603), p(112), max(2, p(4)), th["track"]))
+    o.append(u'<widget name="qh_np_fill" position="%d,%d" size="%d,%d" backgroundColor="%s" zPosition="3" />\n' % (
+        p(282), p(603), p(2), max(2, p(4)), side))
+    o.append(_w("qh_card_time", 54, 590, 112, 30, 14, dim, th["paper"], halign="left"))
+    # solid colour buttons
+    solid = (("qh_red", "#b8433b"), ("qh_green", "#2e8a57"), ("qh_yellow", "#9b7a17"), ("qh_blue", "#3150b8"),
+             ("qh_recbtn", "#7a2a2a"))
+    for i, (name, col) in enumerate(solid):
+        x = 822 - i * 196
+        o.append(_card_img(x, 652, 184, 46, 14, col, None, 1, z=1))
+        o.append(_w(name, x + 6, 652, 172, 46, 19, "#ffffff", col, halign="center"))
+    for name in ("qh_sub", "qh_clock", "qh_date", "qh_c0", "qh_c2", HDRS[0], HDRS[2], "qh_now", "qh_net", "qh_tv",
+                 "qh_fav", "qh_fmt", "qh_rec", "qh_np_title", "qh_np_sub", "qh_np_t1", "qh_np_t2", "qh_card_fill"):
+        o.append(_hide(name))
+    for name in ("qh_np_btn", "qh_np_ayah"):
+        o.append(_hide(name, True))
+    o.append(u"</screen>")
+    return u"".join(o)
+
+
+def v3_geo(layout):
+    """Column widths and row heights of the new layouts (read by the list rows)."""
+    if layout == 9:
+        GEO.update(col_w=[p(226), p(492), p(492)], rows=[p(50), p(60), p(54)], font=p(22))
+    else:
+        GEO.update(col_w=[p(286), p(564), p(306)], rows=[p(50), p(62), p(54)], font=p(22))
+    return GEO
+
+
+# ------------------------------------------------------------------ rows of the new lists
+def v3_row_sec(label, i, th, layout):
+    """A source: icon on a tinted tile + name (light: white text on the green bar)."""
+    key = SECTIONS[i][0]
+    w, h = GEO["col_w"][0], GEO["rows"][0]
+    hs = (BG.cfg.get("src_health") or {}).get(key)
+    label = i18n.T(label)
+    if layout == 9:
+        col, csel = 0xffffff, ui.rgba(th["sel"])[:3]
+        csel = (csel[0] << 16) | (csel[1] << 8) | csel[2]
+        kw = dict(pos=(p(14), 0), size=(w - p(28), h), font=0, flags=RT_HALIGN_RIGHT | RT_VALIGN_CENTER,
+                  text=label, color=col, color_sel=csel)
+        return [i, MultiContentEntryText(**kw)]
+    ic = min(ICON_PX, h - p(14))
+    tile = ui_pix(ui.card, ic + p(10), ic + p(10), p(9), th["tile"], None, 1)
+    kw = dict(pos=(p(10), 0), size=(w - ic - p(40), h), font=0, flags=RT_HALIGN_RIGHT | RT_VALIGN_CENTER, text=label,
+              color=_rgbint(th["text"]), color_sel=_rgbint(th["text"]))
+    if hs and not hs[0]:
+        kw.update(text=label + u" (متوقف)", color=0xff7b7b, color_sel=0xffd0d0)
+    row = [i, MultiContentEntryText(**kw)]
+    tx = w - ic - p(10) - p(12)
+    if tile is not None:
+        row.append(_PixEntry(pos=(tx, (h - ic - p(10)) // 2), size=(ic + p(10), ic + p(10)), png=tile))
+    pix = section_pixmap(key)
+    if pix is not None:
+        row.append(_PixEntry(pos=(tx + p(5), (h - ic) // 2), size=(ic, ic), png=pix))
+    return row
+
+
+def _rgbint(c):
+    r, g, b, _a = ui.rgba(c)
+    return (r << 16) | (g << 8) | b
+
+
+def v3_playing_label(label, payload):
+    """True when this row is what plays now."""
+    if not Player.active:
+        return False
+    t = Player.cur_title or u""
+    if payload and payload.get("title") and payload.get("title") == t:
+        return True
+    name = (label or u"").replace(u"★ ", u"").strip()
+    return bool(name) and t.startswith(name + u" -")
+
+
+def v3_row(col, label, payload, th, layout):
+    """Reciters / items (col 1) and surahs (col 2) like the mock-ups."""
+    w, h = GEO["col_w"][col], GEO["rows"][col]
+    light = layout == 9
+    txt, dim = _rgbint(th["text"]), _rgbint(th["dim"])
+    sel_txt = 0xffffff if light else txt
+    if payload is None:                       # a group title or a message
+        is_head = label.startswith(u"—")
+        return [None, MultiContentEntryText(pos=(p(12), 0), size=(w - p(24), h), font=1 if is_head else 0,
+                                            flags=RT_HALIGN_RIGHT | RT_VALIGN_CENTER,
+                                            text=label.replace(u"—", u"").strip() if is_head else label,
+                                            color=_rgbint(_hex(th["gold"])) if is_head else dim,
+                                            color_sel=_rgbint(_hex(th["gold"])) if is_head else dim)]
+    clean = extras.strip_tashkeel(label)
+    n = payload.get("n") if col == 2 else None
+    row = [payload]
+    if n:                                     # a surah: number box, name, "مكية · 7 آية"
+        d = p(36)
+        box = ui_pix(ui.numbox, d, th["numb"], th.get("numf"))
+        x0 = w - d - p(12)
+        if box is not None:
+            row.append(_PixEntry(pos=(x0, (h - d) // 2), size=(d, d), png=box))
+        row.append(MultiContentEntryText(pos=(x0, (h - d) // 2), size=(d, d), font=2,
+                                         flags=RT_HALIGN_CENTER | RT_VALIGN_CENTER, text=u"%d" % n,
+                                         color=_rgbint(_hex(th["gold"])), color_sel=_rgbint(_hex(th["gold"]))))
+        name = data.surah_name(n)
+        mw = p(118)
+        row.append(MultiContentEntryText(pos=(mw + p(14), 0), size=(x0 - mw - p(26), h), font=0,
+                                         flags=RT_HALIGN_RIGHT | RT_VALIGN_CENTER, text=name, color=txt, color_sel=sel_txt))
+        meta = u"%s · %d آية" % (u"مكية" if studio.SURAH_TYPE[n - 1] == "m" else u"مدنية", studio.ayah_counts()[n - 1])
+        row.append(MultiContentEntryText(pos=(p(8), 0), size=(mw, h), font=1,
+                                         flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER, text=meta,
+                                         color=dim, color_sel=0xd8e6dd if light else dim))
+        return row
+    # anything else: a round avatar with the initials + name (+ a second line) + "يعمل الآن"
+    d = p(46) if not light else p(42)
+    name = clean.replace(u"★ ", u"")
+    ac = ui.palette_for(name) if not light else th["avatar"]
+    av = ui_pix(ui.dot, d, ac)
+    x0 = w - d - p(12)
+    if av is not None:
+        row.append(_PixEntry(pos=(x0, (h - d) // 2), size=(d, d), png=av))
+    row.append(MultiContentEntryText(pos=(x0, (h - d) // 2), size=(d, d), font=2,
+                                     flags=RT_HALIGN_CENTER | RT_VALIGN_CENTER, text=ui.initials(name),
+                                     color=0x0c1210 if not light else _rgbint(th["sel"]),
+                                     color_sel=0x0c1210 if not light else _rgbint(th["sel"])))
+    sub = u""
+    if not light:
+        rec = payload.get("rec")
+        if rec and rec.get("moshaf"):
+            sub = rec["moshaf"][0].get("name", u"")
+            if u" - " in sub:
+                sub = sub.split(u" - ")[-1]
+            sub = u"تلاوة " + sub if sub and not sub.startswith(u"تلاوة") else sub
+        elif payload.get("live"):
+            sub = u"بث مباشر"
+        elif col == 2 and payload.get("title"):
+            sub = u""
+    playing = v3_playing_label(label, payload)
+    right = x0 - p(14)
+    badge_w = p(104) if playing else 0
+    if sub:
+        row.append(MultiContentEntryText(pos=(badge_w + p(10), p(6)), size=(right - badge_w - p(10), h // 2), font=0,
+                                         flags=RT_HALIGN_RIGHT | RT_VALIGN_CENTER, text=name, color=txt, color_sel=sel_txt))
+        row.append(MultiContentEntryText(pos=(badge_w + p(10), h // 2), size=(right - badge_w - p(10), h // 2 - p(6)),
+                                         font=1, flags=RT_HALIGN_RIGHT | RT_VALIGN_CENTER, text=sub,
+                                         color=dim, color_sel=dim))
+    else:
+        row.append(MultiContentEntryText(pos=(badge_w + p(10), 0), size=(right - badge_w - p(10), h), font=0,
+                                         flags=RT_HALIGN_RIGHT | RT_VALIGN_CENTER, text=name, color=txt, color_sel=sel_txt))
+    if playing:
+        bw, bh = p(96), p(30)
+        pill = ui_pix(ui.card, bw, bh, p(10), th["badge"], None, 1)
+        if pill is not None:
+            row.append(_PixEntry(pos=(p(12), (h - bh) // 2), size=(bw, bh), png=pill))
+        row.append(MultiContentEntryText(pos=(p(12), (h - bh) // 2), size=(bw, bh), font=1,
+                                         flags=RT_HALIGN_CENTER | RT_VALIGN_CENTER, text=u"يعمل الآن",
+                                         color=_rgbint(_hex(th["gold"])), color_sel=_rgbint(_hex(th["gold"]))))
+    elif light:
+        row.append(MultiContentEntryText(pos=(p(14), 0), size=(p(30), h), font=1,
+                                         flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER, text=u"◂", color=dim, color_sel=0xffffff))
+    return row
 
 
 def _build_minibar_skin(theme=0):
@@ -1997,8 +2302,12 @@ class Hub17Bg(object):
 
 
 
-BUILD = 23             # one number for both editions (the "what's new" screen and the changelog)
+BUILD = 30             # one number for both editions (the "what's new" screen and the changelog)
 CHANGELOG = [
+    (30, [u"شكل جديد بالكامل: الشاشة الرئيسية بثلاث لوحات وشريط «يعمل الآن» مع الآية الجارية",
+          u"مظهر فاتح بشريط جانبي أخضر وبطاقة مصحف تتبع التلاوة",
+          u"شاشة بداية جديدة: «متابعة الاستماع» والقراء والسور في بطاقات",
+          u"شاشة تشغيل جديدة: موجة الصوت، الآيات مع تظليل الآية الجارية، والتفسير بجانبها"]),
     (23, [u"معالج أول تشغيل (اللغة، المدينة، القارئ، القرص) وبحث داخل القوائم والإعدادات",
           u"«الأكثر استخداماً» أعلى القائمة، وزر «الإبلاغ عن مشكلة» بكود QR",
           u"الواجهة بالفرنسية والتركية والأردية أيضاً",
@@ -2878,6 +3187,13 @@ class Hub21Bg(object):
     house_q = None
 
     def init21(self):
+        if not self.cfg.get("look30"):               # 3.0: the old looks are gone - start on the new ones
+            old = int(self.cfg.get("theme", 0) or 0)
+            self.cfg["theme"] = 3 if old in (6, 15) else 0
+            self.cfg["theme_day"], self.cfg["theme_night"] = 3, 0
+            self.cfg.pop("theme_prayer", None)
+            self.cfg["look30"] = True
+            self.save()
         try:
             for d in packs.atlas_dirs():
                 qtext.add_atlas_dir(d)
@@ -4653,7 +4969,7 @@ class Background(Hub16Bg, Hub17Bg, Hub18Bg, Hub19Bg, Hub21Bg):
             self.set_status(u"تنزيل %s: %d / 114" % (extras.TAFSIR_BY_KEY[st[0]][1], st[1]))
 
     # -- automatic theme (day/night or by prayer time) -----------------------------------------
-    PRAYER_THEME_DEFAULT = {"fajr": 2, "sunrise": 6, "dhuhr": 6, "asr": 1, "maghrib": 3, "isha": 0, "night": 7}
+    PRAYER_THEME_DEFAULT = {"fajr": 1, "sunrise": 3, "dhuhr": 3, "asr": 4, "maghrib": 1, "isha": 0, "night": 2}
     _theme_cache = (0, 0, None)
 
     def theme_idx(self):
@@ -4669,7 +4985,7 @@ class Background(Hub16Bg, Hub17Bg, Hub18Bg, Hub19Bg, Hub21Bg):
         try:
             city = c.get("prayer_city")
             if mode == "daynight":
-                idx = c.get("theme_day", 6) if extras.is_daytime(city, now) else c.get("theme_night", 7)
+                idx = c.get("theme_day", 3) if extras.is_daytime(city, now) else c.get("theme_night", 0)
             else:
                 per = extras.day_period(city, now)
                 idx = (c.get("theme_prayer") or {}).get(per, self.PRAYER_THEME_DEFAULT.get(per, 0))
@@ -7724,7 +8040,7 @@ def _reload_bouquets():
 
 
 class QuranHub(Screen):
-    skin = _build_skin(0)
+    skin = u""
 
     def __init__(self, session, start_sec=None, start_action=None):
         BG.attach(session)
@@ -7747,11 +8063,14 @@ class QuranHub(Screen):
         self["qh_status"] = Label(u"")
         for h in HDRS:
             self[h] = Label(u"")
-        for name in NAMES:
+        for i, name in enumerate(NAMES):
             lst = MenuList([], False, eListboxPythonMultiContent)
             lst.l.setFont(0, gFont("Regular", GEO["font"]))
-            lst.l.setItemHeight(ROW_H)
+            lst.l.setFont(1, gFont("Regular", p(15)))
+            lst.l.setFont(2, gFont("Regular", p(17)))
+            lst.l.setItemHeight(GEO["rows"][i] if "rows" in GEO else ROW_H)
             self[name] = lst
+        self.v3_init()
         self["qh_red"] = Label(u"تصغير ↓ (1)")
         self["qh_green"] = Label(u"تشغيل / فتح")
         self["qh_yellow"] = Label(u"بحث")
@@ -7762,7 +8081,7 @@ class QuranHub(Screen):
         self["qh_fmt"] = Label(BG.fmt_label())
         self["qh_fav"] = Label(u"★ مفضلة (3)")
         self["qh_sleep"] = Label(BG.sleep_label())
-        self["qh_theme"] = Label(u"المظهر (8): %s" % THEMES[BG.theme_idx()]["name"])
+        self["qh_theme"] = Label(u"المظهر: %s" % THEMES[BG.theme_idx()]["name"])
 
         self["actions"] = ActionMap(
             ["OkCancelActions", "ColorActions", "DirectionActions",
@@ -7931,12 +8250,13 @@ class QuranHub(Screen):
                 pass
         self.set_focus(0)
         self.color_labels()
+        self.v3_start()
         BG.ensure_aotd()
         BG.prefetch()
         self.qh_idle, self._ci = make_timer(self.qh_labels)
         self.qh_idle.start(5000, False)
-        self.qh_status_text(BG.status or
-                            u"MENU القائمة الرئيسية • ◀◀ ▶▶ رجوع/تقديم • الاختصارات قابلة للتخصيص من القائمة")
+        self.qh_status_text(BG.status or (u"MENU القائمة • ◀ ▶ التنقل بين اللوحات" if v3() else
+                            u"MENU القائمة الرئيسية • ◀◀ ▶▶ رجوع/تقديم • الاختصارات قابلة للتخصيص من القائمة"))
         self.qh_labels()
         self.load_section()
         BG.show_minibar()
@@ -7956,6 +8276,7 @@ class QuranHub(Screen):
     def qh_cleanup(self):
         try:
             self.qh_idle.stop()
+            self.qh_np_timer.stop()
         except Exception:
             pass
         self.qh_runner.close()
@@ -7986,6 +8307,246 @@ class QuranHub(Screen):
     def qh_status_text(self, text):
         self["qh_status"].setText(text)
 
+    # ================================================================== 3.0: the new look
+    def v3_init(self):
+        for name in V3_EXTRA:
+            self[name] = Label(u"")
+        for name in V3_PIX:
+            self[name] = Pixmap()
+        self.qh_np_verse = None
+        self.qh_np_card = None
+        self.qh_np_state = None
+        self.qh_np_timer, self._cnp = make_timer(self.v3_np)
+
+    def v3_start(self):
+        th = THEMES[BG.theme_idx()]
+        if not v3(th):
+            return
+        self["qh_title"].setText(PLUGIN_NAME)
+        self["qh_sub"].setText(i18n.T(u"القرآن الكريم · التلاوات · التفسير"))
+        self["qh_search"].setText(i18n.T(u"بحث (الزر الأصفر)") if th["layout"] == 9 else
+                                  i18n.T(u"ابحث عن قارئ أو سورة أو آية...") + u"  (%s)" % i18n.T(u"الأصفر"))
+        for n in V3_PIX:
+            try:
+                self[n].hide()
+            except Exception:
+                pass
+        self.v3_np(True)
+        self.qh_np_timer.start(1000, False)
+
+    def v3_headers(self):
+        th = THEMES[BG.theme_idx()]
+        sec = SECTIONS[self.qh_sec]
+        n1 = len([1 for _l, x in self.qh_view[1] if x is not None])
+        n2 = len([1 for _l, x in self.qh_view[2] if x is not None])
+        q = [(u"  [%s]" % self.qh_q[i]) if self.qh_q[i] else u"" for i in range(3)]
+        noun = {u"القراء": u"قارئ", u"الإذاعات": u"إذاعة", u"السور": u"سورة"}.get(sec[2], u"عنصر")
+        if th["layout"] == 9:
+            if self.qh_focus == 2:
+                _i, e = self.current(1)
+                name = self.qh_view[1][_i][0] if _i is not None else sec[1]
+                self[HDRS[1]].setText(i18n.T(name.replace(u"★ ", u"")) + q[2])
+                self["qh_c1"].setText(i18n.T(u"اختر السورة") + u" · %d" % n2)
+            else:
+                self[HDRS[1]].setText(i18n.T(sec[1]) + q[1])
+                self["qh_c1"].setText(i18n.T(u"اختر القارئ ثم السورة") + u" · %d %s" % (n1, i18n.T(u"عنصر")))
+            return
+        self[HDRS[0]].setText(i18n.T(u"الأقسام") + q[0])
+        self[HDRS[1]].setText(i18n.T(sec[1]) + q[1])
+        self[HDRS[2]].setText(i18n.T(u"السور" if self.has_subs_here() else u"المحتوى") + q[2])
+        self["qh_c0"].setText(u"")
+        self["qh_c1"].setText(u"%d %s" % (n1, i18n.T(noun)) if n1 else u"")
+        self["qh_c2"].setText(u"%d %s" % (n2, i18n.T(u"سورة" if self.has_subs_here() else u"عنصر")) if n2 else u"")
+
+    def v3_focus(self):
+        th = THEMES[BG.theme_idx()]
+        if parseColor is None:
+            return
+        if th["layout"] == 9:
+            try:
+                if self.qh_focus == 2:
+                    self[NAMES[1]].hide()
+                    self[NAMES[2]].show()
+                else:
+                    self[NAMES[2]].hide()
+                    self[NAMES[1]].show()
+            except Exception:
+                pass
+            self.v3_headers()
+            return
+        for i in range(3):
+            try:
+                col = _hex(th["gold"]) if i == self.qh_focus else (th["text"] if i else th["dim"])
+                self[HDRS[i]].instance.setForegroundColor(parseColor(col))
+                self[HDRS[i]].instance.invalidate()
+            except Exception:
+                pass
+
+    # -- the now-playing bar (and the mushaf card of the light look) ---------------------------------
+    def v3_np(self, force=False):
+        th = THEMES[BG.theme_idx()]
+        if not v3(th):
+            return
+        light = th["layout"] == 9
+        try:
+            self["qh_clock"].setText(time.strftime("%H:%M"))
+            self["qh_date"].setText(v3_date())
+        except Exception:
+            pass
+        cur = BG.verse_now() if Player.active else None
+        pct, ptxt = BG.progress() if Player.active else (0, u"")
+        pp = BG.play_pos() if Player.active and not BG.cur_live else None
+        if Player.active:
+            rec, sub = QHNow.split_title(Player.cur_title)
+            name = sub.replace(u"سورة ", u"") if sub else u""
+            title = u"%s · %s" % (name, rec) if name else (rec or Player.cur_title or u"")
+            parts = []
+            if cur:
+                parts.append(u"الآية %d من %d" % (cur[1], studio.ayah_counts()[cur[0] - 1]))
+            if BG.cur_live:
+                parts.append(u"بث مباشر")
+            ext = os.path.splitext((BG.real_url(BG.cur_url) or u"").split("?")[0])[1].lstrip(".").upper()
+            if ext in ("MP3", "FLAC", "M4A", "OGG", "OPUS", "WAV", "AAC"):
+                parts.append(ext)
+            if BG.is_paused():
+                parts.append(u"متوقف مؤقتاً")
+            t1 = BG._mmss(int(pp[1])) if pp and pp[1] > 0 else u""
+            t2 = BG._mmss(int(pp[0])) if pp else (ptxt or u"")
+        else:
+            rec, title = u"", i18n.T(u"لا يعمل شيء الآن")
+            parts = [BG.next_prayer_text() or i18n.T(u"اختر قارئاً واضغط OK")]
+            t1 = t2 = u""
+        state = (title, u" · ".join(parts), t1, t2, int(pct), bool(Player.active and not BG.is_paused()))
+        if state != self.qh_np_state or force:
+            self.qh_np_state = state
+            for k, v in (("qh_np_title", title), ("qh_np_sub", state[1]), ("qh_np_t1", t1), ("qh_np_t2", t2),
+                         ("qh_card_rec", rec), ("qh_card_time", (u"%s / %s" % (t2, t1)) if t1 else t2)):
+                try:
+                    self[k].setText(v)
+                except Exception:
+                    pass
+            track = p(112) if light else p(780)
+            fw = max(2, int(track * pct / 100.0)) if Player.active and ptxt != u"LIVE" else 2
+            try:
+                self["qh_np_fill"].instance.resize(eSize(fw, max(2, p(4))))
+                self["qh_np_fill"].instance.move(ePoint((p(282) if light else p(864)) - fw, p(603) if light else p(637)))
+            except Exception:
+                pass
+            if not light:
+                try:
+                    glyph = "pause" if state[5] else "play"
+                    pix = ui_pix(ui.disc, p(56), _hex(th["gold"]), None, 0, glyph, "#0c1210")
+                    if pix is not None:
+                        self["qh_np_btn"].instance.setPixmap(pix)
+                        self["qh_np_btn"].show()
+                except Exception:
+                    pass
+        if cur != self.qh_np_verse or force:
+            self.qh_np_verse = cur
+            if light:
+                self.v3_card(cur)
+            else:
+                self.v3_ayah(cur)
+
+    def v3_ayah(self, cur):
+        """The ayah being recited, centred in the now-playing bar."""
+        try:
+            if not cur or not img_text():
+                return self["qh_np_ayah"].hide()
+            n, a = cur
+            words = extras.sanitize(dict(extras.local_verses(n) or []).get(a, u"")).split()
+            h = p(50)
+            px = int(h / 1.85)
+            lim = p(780) - p(20)
+            out = []
+            for w_ in words:
+                if qtext.line_width(u" ".join(out + [w_, u"﴿%s﴾" % extras.ar_num(a)]), px) > lim:
+                    out.append(u"…")
+                    break
+                out.append(w_)
+            text = u" ".join(out) + u" ﴿%s﴾" % extras.ar_num(a)
+            th = THEMES[BG.theme_idx()]
+            pix, iw = text_pixmap(text, px, th["ayah"], h, line_tajweed(text) if tajweed_on() else None)
+            if pix is None:
+                return self["qh_np_ayah"].hide()
+            self["qh_np_ayah"].instance.setPixmap(pix)
+            self["qh_np_ayah"].instance.resize(eSize(iw, h))
+            self["qh_np_ayah"].instance.move(ePoint(p(84) + max(0, (p(780) - iw) // 2), p(576)))
+            self["qh_np_ayah"].show()
+        except Exception as e:
+            qlog("np ayah: %r" % (e,))
+
+    def v3_card(self, cur):
+        """Light look: the surah title on the green band and six lines from the current ayah on,
+        the ayah being recited in the theme colour."""
+        th = THEMES[BG.theme_idx()]
+        try:
+            if not img_text():
+                return
+            n, a = cur if cur else ((BG.cfg.get("reader_pos") or {}).get("n") or 1, 0)
+            key = (n, a)
+            if key == self.qh_np_card:
+                return
+            self.qh_np_card = key
+            hT = p(58)
+            pix, iw = text_pixmap(u"سُورَةُ %s" % data.surah_name(n), int(hT / 1.85), 0xf4ecd2, hT)
+            if pix is not None:
+                self["qh_card_title"].instance.setPixmap(pix)
+                self["qh_card_title"].instance.resize(eSize(iw, hT))
+                self["qh_card_title"].instance.move(ePoint(p(66) + max(0, (p(358) - iw) // 2), p(140)))
+                self["qh_card_title"].show()
+            verses = extras.local_verses(n) or []
+            first = max(1, a - 1) if a else 1
+            words = []
+            for vn, vt in verses:
+                if vn < first:
+                    continue
+                for w_ in extras.sanitize(vt).split():
+                    words.append((w_, vn))
+                words.append((u"﴿%s﴾" % extras.ar_num(vn), vn))
+                if len(words) > 120:
+                    break
+            h = p(60)
+            px = int(h / 1.85)
+            lim = p(382) - p(8)
+            lines, curl = [], []
+            for w_, vn in words:
+                trial = u" ".join(x for x, _v in curl + [(w_, vn)])
+                if curl and qtext.line_width(trial, px) > lim:
+                    lines.append(curl)
+                    curl = []
+                    if len(lines) == 6:
+                        break
+                curl.append((w_, vn))
+            if curl and len(lines) < 6:
+                lines.append(curl)
+            hi = _rgbint(th["sel"])
+            base = _rgbint(th["text"])
+            for i in range(6):
+                wname = "qh_card_l%d" % i
+                if i >= len(lines):
+                    self[wname].hide()
+                    continue
+                ln = lines[i]
+                text = u" ".join(x for x, _v in ln)
+                colors, pos = {}, 0
+                for x, vn in ln:
+                    if a and vn == a:
+                        for k in range(pos, pos + len(x)):
+                            colors[k] = hi
+                    pos += len(x) + 1
+                pix, iw = text_pixmap(text, px, base, h, colors or None)
+                if pix is None:
+                    self[wname].hide()
+                    continue
+                self[wname].instance.setPixmap(pix)
+                self[wname].instance.resize(eSize(iw, h))
+                self[wname].instance.move(ePoint(p(54) + max(0, (p(382) - iw) // 2), p(212) + i * p(62)))
+                self[wname].show()
+        except Exception as e:
+            qlog("card: %r" % (e,))
+
+
     def qh_highlight(self, item):
         for col in (2, 1):       # keep the highlight on the playing row
             for i, (_, pl) in enumerate(self.qh_view[col]):
@@ -7997,6 +8558,20 @@ class QuranHub(Screen):
 
     # -- list plumbing -------------------------------------------------------
     def entry(self, col, label, payload):
+        th = THEMES[BG.theme_idx()]
+        if th["layout"] in V3_LAYOUTS:
+            try:
+                if col == 0 and payload is not None:
+                    return v3_row_sec(label, payload, th, th["layout"])
+                if col == 0:
+                    return [None, MultiContentEntryText(pos=(p(12), 0), size=(GEO["col_w"][0] - p(24), GEO["rows"][0]),
+                                                        font=1, flags=RT_HALIGN_RIGHT | RT_VALIGN_CENTER,
+                                                        text=label.replace(u"—", u"").strip(),
+                                                        color=_rgbint(th["dim"] if th["layout"] == 8 else "#cfe0d8"),
+                                                        color_sel=_rgbint(th["dim"]))]
+                return v3_row(col, label, payload, th, th["layout"])
+            except Exception as e:
+                qlog("v3 row: %r" % (e,))
         if col == 0 and payload is not None:
             try:
                 return self.sec_entry(label, payload)
@@ -8080,6 +8655,8 @@ class QuranHub(Screen):
         return 2 if self.has_subs_here() else 1
 
     def update_headers(self):
+        if v3():
+            return self.v3_headers()
         sec = SECTIONS[self.qh_sec]
         titles = [getattr(self, "qh_group_of", {}).get(self.qh_sec, u"المصادر"), sec[2], u"السور"]
         for i in range(3):
@@ -8090,6 +8667,8 @@ class QuranHub(Screen):
 
     def set_focus(self, col):
         self.qh_focus = max(0, min(col, self.max_focus()))
+        if v3():
+            return self.v3_focus()
         if parseColor is None:
             return
         th = THEMES[BG.theme_idx()]
@@ -9202,6 +9781,13 @@ class QuranHub(Screen):
         self.button_labels()
 
     def button_labels(self):
+        if v3():                                 # 3.0: short chips ("المظهر: زمردي ليلي")
+            for widget, k in self.BUTTON_KEYS:
+                aid, label, _m = self.key_action(k)
+                t = i18n.T(self.action_text(aid, label))
+                t = t.replace(u"المظهر (8): ", u"").replace(u" (8)", u"")
+                self[widget].setText(t if len(t) <= 22 else t[:21] + u"…")
+            return
         for widget, k in self.BUTTON_KEYS:
             aid, label, _m = self.key_action(k)
             self[widget].setText(u"%s (%s)" % (i18n.T(self.action_text(aid, label)), k))
@@ -10377,12 +10963,12 @@ def _hex(c):
 
 
 class QHHome(Screen):
-    """Home screen (v3): 4 x 3 grid of tiles, each with its own accent colour."""
-    TW, TH = 288, 128
-    GX, GY = 22, 16
-    COLS, ROWS = 4, 3
-    ACCENTS = ["#2fbf71", "#e0a82e", "#2f9fd8", "#8e6bd8", "#d8694f", "#3bb8b0",
-               "#d85f8a", "#9ab53a", "#d89a3a", "#4f86d8", "#a98be0", "#6fb0b8"]
+    """3.0 home (mock-up 3): tabs, «متابعة الاستماع» card with the geometric art, a row of reciters and
+    a row of surahs.  ▲▼ between the rows, ◀▶ inside a row, OK opens / plays."""
+    NREC = 7
+    NSUR = 7
+    TABS = [u"الرئيسية", u"القراء", u"المصاحف", u"التفسير", u"المفضلة"]
+    BTNS = [u"استمرار", u"التفسير", u"مفضلة"]
 
     def __init__(self, session):
         BG.attach(session)
@@ -10391,215 +10977,401 @@ class QHHome(Screen):
         self.qh_th = th
         self.skin = self._skin(th)
         Screen.__init__(self, session)
-        self.skinName = "QuranHubHome"
-        self.qh_idx = 0
+        self.skinName = "QuranHubHome3"
         self.qh_runner = Runner()
-        self["hm_title"] = Label(PLUGIN_NAME)
-        self["hm_clock"] = Label(u"")
-        self["hm_now"] = Label(u"")
-        self["hm_ayah"] = Label(u"")
-        self["hm_hint"] = Label(u"OK فتح  •  1-9 و 0 مباشر  •  MENU الإعدادات  •  أحمر: التشغيل الآن  •  أخضر: تابع  •  أصفر: بحث  •  أزرق: تشخيص")
-        self["hm_cursor"] = Label(u"")
-        for i in range(self.COLS * self.ROWS):
-            self["t%d" % i] = Label(u"")
-            self["s%d" % i] = Label(u"")
-        keys = {"ok": lambda: self.activate(self.qh_idx), "cancel": self.close,
-                "left": lambda: self.move(1, 0), "right": lambda: self.move(-1, 0),
-                "up": lambda: self.move(0, -1), "down": lambda: self.move(0, 1),
-                "red": lambda: self.activate(0), "green": BG.resume_last,
-                "yellow": lambda: self.open_hub(None, "gsearch"), "blue": self.open_diag,
-                "mainMenu": lambda: self.open_hub(None, "menu"), "0": lambda: self.activate(9)}
-        for k in range(1, 10):
-            keys[str(k)] = (lambda i=k - 1: self.activate(i))
-        self["actions"] = ActionMap(
-            ["OkCancelActions", "DirectionActions", "ColorActions", "NumberActions", "InfobarMenuActions"], keys, -1)
+        self.hm_row, self.hm_col = 2, 0
+        self.hm_rec_off, self.hm_sur_off = 0, 0
+        self.hm_recs = []                 # [(label, entry)]
+        self.hm_chosen = 0                # the reciter the surah cards play
+        self.hm_art_key = None
+        self.hm_hero = None
+        for n in ("hm_brand", "hm_clock", "hm_kicker", "hm_sub", "hm_rh", "hm_rsub", "hm_sh", "hm_status"):
+            self[n] = Label(u"")
+        self["hm_art"] = Pixmap()
+        self["hm_title"] = Pixmap()
+        for i in range(len(self.TABS)):
+            self["hm_tab%d" % i] = Label(i18n.T(self.TABS[i]))
+            self["hm_tabbg%d" % i] = Pixmap()
+        for i in range(len(self.BTNS)):
+            self["hm_btn%d" % i] = Label(i18n.T(self.BTNS[i]))
+            self["hm_btnbg%d" % i] = Pixmap()
+        for i in range(self.NREC):
+            for k in ("hm_rbg%d", "hm_rav%d"):
+                self[k % i] = Pixmap()
+            self["hm_rin%d" % i] = Label(u"")
+            self["hm_rnm%d" % i] = Label(u"")
+        for i in range(self.NSUR):
+            self["hm_sbg%d" % i] = Pixmap()
+            for k in ("hm_sno%d", "hm_snm%d", "hm_smt%d"):
+                self[k % i] = Label(u"")
+        keys = {"ok": self.ok, "cancel": self.close,
+                "left": lambda: self.move(0, 1), "right": lambda: self.move(0, -1),
+                "up": lambda: self.move(-1, 0), "down": lambda: self.move(1, 0),
+                "red": self.close, "green": self.resume, "yellow": lambda: self.open_hub(None, "gsearch"),
+                "blue": lambda: self.session.open(QHDiag), "mainMenu": lambda: self.open_hub(None, "menu")}
+        self["actions"] = ActionMap(["OkCancelActions", "DirectionActions", "ColorActions", "InfobarMenuActions"],
+                                    keys, -1)
         self.qh_timer, self._c = make_timer(self.refresh)
         self.onLayoutFinish.append(self.start)
         self.onClose.append(self.cleanup)
 
-    # tile order = RTL grid: index 0 is top-right
+    # -- geometry (1280 x 720 grid; right to left) ---------------------------------------------------
+    @staticmethod
+    def rec_x(i):
+        return 1250 - 162 - i * 176
+
+    @staticmethod
+    def sur_x(i):
+        return 1250 - 162 - i * 176
+
     @classmethod
-    def pos(cls, i):
-        r, c = divmod(i, cls.COLS)
-        x = 1280 - 30 - cls.TW - c * (cls.TW + cls.GX)
-        y = 100 + r * (cls.TH + cls.GY)
-        return x, y
+    def tab_x(cls, i):
+        return 1006 - 128 - i * 136
 
     @classmethod
     def _skin(cls, th):
-        glass = th["bg"] == "transparent"
-        bgc = "#e6000000" if glass else th["bg"]
-        card = "#c0111820" if glass else th["panel"]
-        out = [u'<screen name="QuranHubHome" position="0,0" size="%d,%d" flags="wfNoBorder" backgroundColor="%s">' % (
-            p(1280), p(720), bgc)]
-        out.append(u'<eLabel position="0,0" size="%d,%d" backgroundColor="%s" zPosition="0" />' % (p(1280), p(84), th["bar"]))
-        out.append(u'<eLabel position="0,%d" size="%d,%d" backgroundColor="%s" zPosition="1" />' % (p(84), p(1280), p(3), th["line"]))
-        out.append(u'<widget name="hm_title" position="%d,%d" size="%d,%d" font="Regular;%d" halign="right" valign="center" '
-                   u'foregroundColor="%s" backgroundColor="%s" transparent="1" zPosition="2" />' % (
-                       p(700), p(8), p(540), p(68), p(46), "#ffffff", th["bar"]))
-        out.append(u'<widget name="hm_clock" position="%d,%d" size="%d,%d" font="Regular;%d" halign="left" valign="center" '
-                   u'foregroundColor="%s" backgroundColor="%s" transparent="1" zPosition="2" />' % (
-                       p(40), p(8), p(200), p(68), p(32), th["line"], th["bar"]))
-        out.append(u'<widget name="hm_now" position="%d,%d" size="%d,%d" font="Regular;%d" halign="center" valign="center" '
-                   u'foregroundColor="%s" backgroundColor="%s" transparent="1" zPosition="2" />' % (
-                       p(250), p(8), p(450), p(68), p(21), th["text"], th["bar"]))
-        out.append(u'<widget name="hm_cursor" position="0,0" size="%d,%d" backgroundColor="%s" zPosition="1" />' % (
-            p(cls.TW + 10), p(cls.TH + 10), th["line"]))
-        for i in range(cls.COLS * cls.ROWS):
-            x, y = cls.pos(i)
-            ac = cls.ACCENTS[i % len(cls.ACCENTS)]
-            out.append(u'<eLabel position="%d,%d" size="%d,%d" backgroundColor="%s" zPosition="2" />' % (
-                p(x), p(y), p(cls.TW), p(cls.TH), card))
-            out.append(u'<eLabel position="%d,%d" size="%d,%d" backgroundColor="%s" zPosition="3" />' % (
-                p(x + cls.TW - 7), p(y), p(7), p(cls.TH), ac))
-            out.append(u'<eLabel position="%d,%d" size="%d,%d" backgroundColor="%s" zPosition="3" />' % (
-                p(x), p(y + cls.TH - 3), p(cls.TW - 7), p(3), ac))
-            out.append(u'<widget name="t%d" position="%d,%d" size="%d,%d" font="Regular;%d" halign="right" valign="center" '
-                       u'foregroundColor="%s" backgroundColor="%s" transparent="1" zPosition="4" />' % (
-                           i, p(x + 10), p(y + 8), p(cls.TW - 28), p(44), p(29), th["text"], card))
-            out.append(u'<widget name="s%d" position="%d,%d" size="%d,%d" font="Regular;%d" halign="right" valign="top" '
-                       u'foregroundColor="%s" backgroundColor="%s" transparent="1" zPosition="4" />' % (
-                           i, p(x + 10), p(y + 56), p(cls.TW - 28), p(66), p(18), th["dim"], card))
-        yb = 100 + cls.ROWS * (cls.TH + cls.GY)
-        out.append(u'<eLabel position="%d,%d" size="%d,%d" backgroundColor="%s" zPosition="2" />' % (
-            p(30), p(yb + 2), p(1220), p(84), card))
-        out.append(u'<eLabel position="%d,%d" size="%d,%d" backgroundColor="%s" zPosition="3" />' % (
-            p(30), p(yb + 2), p(7), p(84), th["line"]))
-        out.append(u'<widget name="hm_ayah" position="%d,%d" size="%d,%d" font="Regular;%d" halign="center" valign="center" '
-                   u'foregroundColor="%s" backgroundColor="%s" transparent="1" zPosition="4" />' % (
-                       p(54), p(yb + 4), p(1180), p(80), p(27), _hex(th["gold"]), card))
-        out.append(u'<widget name="hm_hint" position="%d,%d" size="%d,%d" font="Regular;%d" halign="center" valign="center" '
-                   u'foregroundColor="%s" backgroundColor="%s" transparent="1" zPosition="4" />' % (
-                       p(20), p(yb + 94), p(1240), p(30), p(17), th["dim"], bgc))
-        out.append(u'</screen>')
-        return u"".join(out)
+        light = th["layout"] == 9
+        bg = th["bg"]
+        card = th["panel"] if not light else "#ffffff"
+        hero = th["hero"] if "hero" in th else (th["panel"] if not light else "#ffffff")
+        txt, dim, acc = th["text"], th["dim"], th.get("accent2", th.get("avatar", "#5bd6a0"))
+        o = [u'<screen name="QuranHubHome3" position="0,0" size="%d,%d" flags="wfNoBorder" backgroundColor="%s">\n'
+             % (p(1280), p(720), bg)]
+        o.append(_w("hm_brand", 1010, 18, 250, 48, 30, acc if not light else th["sel"], bg))
+        for i in range(len(cls.TABS)):
+            x = cls.tab_x(i)
+            o.append(_pixw("hm_tabbg%d" % i, x, 20, 128, 46, z=2))
+            o.append(_w("hm_tab%d" % i, x, 20, 128, 46, 20, txt, bg, halign="center"))
+        o.append(_img(ui_png(ui.search_icon, p(24), dim), 108, 32, 24, 24, 2))
+        o.append(_w("hm_clock", 30, 22, 74, 40, 19, dim, bg, halign="left"))
+        o.append(_w("hm_status", 140, 22, 160, 40, 14, _hex(th["gold"]), bg, halign="left"))
+        # hero card
+        o.append(_card_img(30, 84, 1220, 252, 26, hero, th["border"], 1, z=1))
+        o.append(_img(ui_png(ui.card, p(350), p(252), p(26), th.get("hero2", hero), None, 1), 30, 84, 350, 252, 1))
+        o.append(_pixw("hm_art", 85, 90, 240, 240, z=2))
+        o.append(_w("hm_kicker", 600, 100, 620, 30, 18, acc if not light else th["sel"], hero))
+        o.append(_pixw("hm_title", 520, 128, 700, 86, z=3))
+        o.append(_w("hm_sub", 420, 214, 800, 32, 20, dim, hero))
+        for i in range(len(cls.BTNS)):
+            x = 1222 - 176 - i * 196
+            o.append(_pixw("hm_btnbg%d" % i, x, 258, 176 if i == 0 else 180, 52, z=2))
+            o.append(_w("hm_btn%d" % i, x, 258, 176 if i == 0 else 180, 52, 21, txt, hero, halign="center", z=3))
+        # reciters row
+        o.append(_w("hm_rh", 1000, 346, 250, 38, 26, txt, bg))
+        o.append(_w("hm_rsub", 500, 350, 490, 32, 16, dim, bg))
+        for i in range(cls.NREC):
+            x = cls.rec_x(i)
+            o.append(_pixw("hm_rbg%d" % i, x, 390, 162, 150, z=1))
+            o.append(_pixw("hm_rav%d" % i, x + 41, 404, 80, 80, z=2))
+            o.append(_w("hm_rin%d" % i, x + 41, 404, 80, 80, 28, "#0c1210", card, halign="center", z=3))
+            o.append(_w("hm_rnm%d" % i, x + 6, 494, 150, 36, 18, txt, card, halign="center", z=3))
+        # surahs row
+        o.append(_w("hm_sh", 1000, 550, 250, 38, 26, txt, bg))
+        for i in range(cls.NSUR):
+            x = cls.sur_x(i)
+            o.append(_pixw("hm_sbg%d" % i, x, 594, 162, 104, z=1))
+            o.append(_w("hm_sno%d" % i, x + 112, 604, 40, 46, 30, acc if not light else th["sel"], card, halign="center", z=3))
+            o.append(_w("hm_snm%d" % i, x + 10, 604, 104, 46, 22, txt, card, z=3))
+            o.append(_w("hm_smt%d" % i, x + 10, 652, 142, 30, 14, dim, card, z=3))
+        o.append(u"</screen>")
+        return u"".join(o)
 
-    # -- content -------------------------------------------------------------------------------
-    def tile_defs(self):
-        playing = Player.active
-        rp = BG.cfg.get("reader_pos") or {}
-        r = BG.cfg.get("resume") or {}
-        pt = BG.next_prayer_text()
-        k = studio.khatma_state(BG.cfg)
-        tvm = {"pip": u"صورة القناة كاملة + القرآن", "overlay": u"مشغّل ثانٍ فوق القناة",
-               "off": u"الصوت يحل محل القناة"}[BG.tv_strategy()]
-        return [
-            (u"▶ يتم التشغيل الآن" if playing else u"▶ تابع الاستماع",
-             (Player.cur_title or u"")[:44] if playing else ((r.get("title") or u"لا يوجد بعد")[:44])),
-            (u"★ المفضلة", u"%d عنصراً" % len(BG.cfg.get("fav", []))),
-            (u"الإذاعات", u"إذاعات القرآن على الهواء مباشرة"),
-            (u"القراء والمكتبة", u"كل القراء من المواقع الستة"),
-            (u"المصحف المقروء", (u"تابع القراءة: سورة %s" % data.surah_name(rp["n"])) if rp.get("n") else u"اقرأ السور بخط كبير"),
-            (u"التفاسير", u"الميسر • السعدي • ابن كثير • الطبري ..."),
-            (u"استوديو الحفظ", u"كرّر الآية والمقطع بصوت القارئ"),
-            (u"الختمة والورد", u"تقدّمك %d%% • الورد %d صفحة" % (int(k["pages"] * 100 / float(studio.PAGES)), studio.khatma_daily(k))),
-            (u"الأذكار والأدعية", u"حصن المسلم • أسماء الله الحسنى"),
-            (u"قناة + تلاوة", tvm),
-            (u"مواقيت الصلاة", pt or u"اختر المدينة من الإعدادات"),
-            (u"المزيد", u"بحث • إحصائيات • باقة إذاعات • تشخيص"),
-        ]
+    # -- pictures ---------------------------------------------------------------------------------------
+    def card_pix(self, w, h, focus, r=18):
+        th = self.qh_th
+        light = th["layout"] == 9
+        fill = th["panel"] if not light else "#ffffff"
+        if focus:
+            return ui_pix(ui.card, p(w), p(h), p(r), th.get("card_focus", fill), "#ffffff" if not light else th["sel"], max(2, p(3)))
+        return ui_pix(ui.card, p(w), p(h), p(r), fill, th["border"], 1)
 
+    def set_pix(self, name, pix, show=True):
+        try:
+            if pix is not None and show:
+                self[name].instance.setPixmap(pix)
+                self[name].show()
+            else:
+                self[name].hide()
+        except Exception:
+            pass
+
+    # -- content ------------------------------------------------------------------------------------------
     def start(self):
-        BG.ensure_aotd()
-        self.place_cursor()
+        BG.hide_minibar()
+        self["hm_brand"].setText(PLUGIN_NAME)
+        self["hm_rh"].setText(i18n.T(u"القراء"))
+        self["hm_sh"].setText(i18n.T(u"السور"))
+        self.load_recs()
+        self.paint()
         self.refresh()
         self.qh_timer.start(1000, False)
 
     def cleanup(self):
         self.qh_timer.stop()
         self.qh_runner.close()
+        BG.show_minibar()
+
+    def load_recs(self):
+        def got(rows):
+            if isinstance(rows, Exception) or not rows:
+                rows = []
+            favs = [f[1] for f in BG.cfg.get("fav", []) if f and f[0] == "mp3q_reciters"]
+            first = [r for r in rows if r[0] in favs]
+            rest = [r for r in rows if r[0] not in favs]
+            self.hm_recs = [r for r in first + rest if r[1] is not None]
+            res = (BG.cfg.get("resume") or {}).get("title") or u""
+            for i, (l, _e) in enumerate(self.hm_recs):
+                if res.startswith(l + u" -"):
+                    self.hm_chosen = i
+                    break
+            self["hm_rsub"].setText(u"%d %s · %s" % (len(rows), i18n.T(u"قارئ"), i18n.T(u"مكتبة القراء الشاملة")))
+            self.paint()
+        cached = SEC_CACHE.get("mp3q_reciters")
+        if cached is not None:
+            return got(cached)
+        self.qh_runner.run(section_loader("mp3q_reciters"), got, got)
+
+    def hero_info(self):
+        """-> (kicker, title, sub, reciter name)."""
+        if Player.active:
+            rec, sub = QHNow.split_title(Player.cur_title)
+            cur = BG.verse_now()
+            n = cur[0] if cur else extras.surah_of_title(Player.cur_title)
+            title = (u"سورة %s" % data.surah_name(n)) if n else (sub or rec or u"")
+            line = u"بصوت الشيخ %s" % rec if rec else u""
+            if cur:
+                line += u" · الآية %d من %d" % (cur[1], studio.ayah_counts()[cur[0] - 1])
+            return i18n.T(u"يعمل الآن"), title, line, rec
+        r = BG.cfg.get("resume") or {}
+        if r.get("title"):
+            rec, sub = QHNow.split_title(r["title"])
+            n = extras.surah_of_title(r["title"])
+            title = (u"سورة %s" % data.surah_name(n)) if n else (sub or rec)
+            line = u"بصوت الشيخ %s" % rec if rec else u""
+            if r.get("pos"):
+                line += u" · توقفت عند %s" % BG._mmss(int(r["pos"]))
+            return i18n.T(u"متابعة الاستماع"), title, line, rec
+        return i18n.T(u"ابدأ الاستماع"), u"القرآن الكريم", i18n.T(u"اختر قارئاً من الأسفل ثم السورة"), u""
 
     def refresh(self):
-        if BG.theme_idx() != self.qh_theme:                     # day/night or prayer-time theme switch
+        if BG.theme_idx() != self.qh_theme:
             return self.close("retheme")
-        vals = {}
-        for i, (t, s) in enumerate(self.tile_defs()):
-            vals["t%d" % i], vals["s%d" % i] = t, s
-        vals["hm_clock"] = time.strftime("%H:%M")
-        vals["hm_now"] = (u"♪ %s" % Player.cur_title)[:60] if Player.active else BG.next_prayer_text()
-        a = BG.cfg.get("aotd") or {}
-        vals["hm_ayah"] = (u"﴿ %s ﴾" % a["t"]) if a.get("t") else u"آية اليوم: جاري التحميل ..."
-        last = getattr(self, "qh_last_vals", {})
-        for k, v in vals.items():              # only touch labels that changed (cheap on small boxes)
-            if last.get(k) != v:
-                self[k].setText(v)
-        self.qh_last_vals = vals
+        self["hm_clock"].setText(time.strftime("%H:%M"))
+        self["hm_status"].setText(BG.status if BG.status and len(BG.status) < 40 else u"")
+        info = self.hero_info()
+        if info != self.hm_hero:
+            self.hm_hero = info
+            kick, title, line, rec = info
+            self["hm_kicker"].setText(kick)
+            self["hm_sub"].setText(line)
+            th = self.qh_th
+            h = p(86)
+            col = 0xffffff if th["layout"] != 9 else _rgbint(th["text"])
+            pix, iw = text_pixmap(title, int(h / 1.85), col, h)
+            if pix is not None:
+                self["hm_title"].instance.setPixmap(pix)
+                self["hm_title"].instance.resize(eSize(iw, h))
+                self["hm_title"].instance.move(ePoint(p(1220) - iw, p(128)))
+                self["hm_title"].show()
+            self.art(rec)
 
-    def place_cursor(self):
-        x, y = self.pos(self.qh_idx)
-        try:
-            self["hm_cursor"].instance.move(ePoint(p(x - 5), p(y - 5)))
-        except Exception:
-            pass
+    def art(self, rec):
+        key = (rec, self.qh_theme)
+        if key == self.hm_art_key:
+            return
+        self.hm_art_key = key
+        th = self.qh_th
+        light = th["layout"] == 9
+        line = th.get("art", "#2f8f6a") if not light else th["paper_line"]
+        inner = th.get("hero2", th["panel"]) if not light else "#ffffff"
+        acc = th.get("accent2", th.get("avatar", "#5bd6a0")) if not light else th["sel"]
+        txt = ui.initials(rec) if rec else u"ق"
 
-    def move(self, dc, dr):
-        r, c = divmod(self.qh_idx, self.COLS)
-        c = max(0, min(self.COLS - 1, c + dc))
-        r = max(0, min(self.ROWS - 1, r + dr))
-        self.qh_idx = r * self.COLS + c
-        self.place_cursor()
+        def made(path):
+            if isinstance(path, Exception) or not path:
+                return
+            try:
+                from Tools.LoadPixmap import LoadPixmap
+                self.set_pix("hm_art", LoadPixmap(path))
+            except Exception as e:
+                qlog("art: %r" % (e,))
+        self.qh_runner.run(lambda: ui.cached(ui.art, p(240), line, inner, txt, acc), made, made)
 
-    # -- actions -------------------------------------------------------------------------------
+    def paint(self):
+        th = self.qh_th
+        light = th["layout"] == 9
+        foc = lambda r, c: self.hm_row == r and self.hm_col == c
+        # tabs
+        for i in range(len(self.TABS)):
+            active = i == 0
+            if foc(0, i):
+                pix = ui_pix(ui.card, p(128), p(46), p(23), "#ffffff" if not light else th["sel"], None, 1)
+            elif active:
+                pix = ui_pix(ui.card, p(128), p(46), p(23), th["panel"] if not light else "#ffffff", th["border"], 1)
+            else:
+                pix = None
+            self.set_pix("hm_tabbg%d" % i, pix)
+            try:
+                c = "#0c1210" if foc(0, i) and not light else ("#ffffff" if foc(0, i) else th["text"])
+                self["hm_tab%d" % i].instance.setForegroundColor(parseColor(c))
+            except Exception:
+                pass
+        # hero buttons
+        acc = th.get("accent2", th.get("avatar", "#5bd6a0")) if not light else th["sel"]
+        for i in range(len(self.BTNS)):
+            w = 176 if i == 0 else 180
+            fill = acc if i == 0 else th.get("chip", th["panel"])
+            pix = ui_pix(ui.card, p(w), p(52), p(16), fill, "#ffffff" if foc(1, i) else None, max(2, p(3)))
+            self.set_pix("hm_btnbg%d" % i, pix)
+            try:
+                c = ("#0c1210" if not light else "#ffffff") if i == 0 else th["text"]
+                self["hm_btn%d" % i].instance.setForegroundColor(parseColor(c))
+            except Exception:
+                pass
+        # reciters
+        n = len(self.hm_recs)
+        for i in range(self.NREC):
+            k = self.hm_rec_off + i
+            if k >= n:
+                for w_ in ("hm_rbg%d", "hm_rav%d"):
+                    self.set_pix(w_ % i, None)
+                self["hm_rin%d" % i].setText(u"")
+                self["hm_rnm%d" % i].setText(u"")
+                continue
+            name = self.hm_recs[k][0]
+            self.set_pix("hm_rbg%d" % i, self.card_pix(162, 150, foc(2, i)))
+            ring = th.get("accent2", "#5bd6a0") if k == self.hm_chosen and not foc(2, i) else None
+            colr = ui.palette_for(name) if not light else th["avatar"]
+            self.set_pix("hm_rav%d" % i, ui_pix(ui.avatar, p(80), colr, u"", "#000000", False, ring, max(2, p(4))) if ring
+                         else ui_pix(ui.dot, p(80), colr))
+            self["hm_rin%d" % i].setText(ui.initials(name))
+            self["hm_rnm%d" % i].setText(name if len(name) <= 16 else name[:15] + u"…")
+        # surahs
+        for i in range(self.NSUR):
+            s_ = self.hm_sur_off + i + 1
+            if s_ > 114:
+                self.set_pix("hm_sbg%d" % i, None)
+                for w_ in ("hm_sno%d", "hm_snm%d", "hm_smt%d"):
+                    self[w_ % i].setText(u"")
+                continue
+            self.set_pix("hm_sbg%d" % i, self.card_pix(162, 104, foc(3, i), 16))
+            self["hm_sno%d" % i].setText(u"%d" % s_)
+            self["hm_snm%d" % i].setText(data.surah_name(s_))
+            self["hm_smt%d" % i].setText(u"%s · %d آية" % (u"مكية" if studio.SURAH_TYPE[s_ - 1] == "m" else u"مدنية",
+                                                          studio.ayah_counts()[s_ - 1]))
+
+    def move(self, dr, dc):
+        sizes = [len(self.TABS), len(self.BTNS), self.NREC, self.NSUR]
+        if dr:
+            self.hm_row = max(0, min(3, self.hm_row + dr))
+            self.hm_col = min(self.hm_col, sizes[self.hm_row] - 1)
+        else:
+            c = self.hm_col + dc
+            if self.hm_row == 2:
+                n = len(self.hm_recs)
+                if c >= self.NREC and self.hm_rec_off + self.NREC < n:
+                    self.hm_rec_off += 1
+                    c = self.NREC - 1
+                elif c < 0 and self.hm_rec_off > 0:
+                    self.hm_rec_off -= 1
+                    c = 0
+                c = max(0, min(min(self.NREC, n) - 1, c))
+            elif self.hm_row == 3:
+                if c >= self.NSUR and self.hm_sur_off + self.NSUR < 114:
+                    self.hm_sur_off += 1
+                    c = self.NSUR - 1
+                elif c < 0 and self.hm_sur_off > 0:
+                    self.hm_sur_off -= 1
+                    c = 0
+                c = max(0, min(self.NSUR - 1, c))
+            else:
+                c = max(0, min(sizes[self.hm_row] - 1, c))
+            self.hm_col = c
+        self.paint()
+
+    # -- actions ---------------------------------------------------------------------------------------
     def open_hub(self, sec=None, action=None):
         self.session.open(QuranHub, sec, action)
 
-    def open_diag(self):
-        self.session.open(QHDiag)
+    def resume(self):
+        if Player.active:
+            return self.session.open(QHPlayer)
+        BG.resume_last()
 
-    def activate(self, i):
-        self.qh_idx = i
-        self.place_cursor()
-        if i == 0:
-            if Player.active:
-                self.session.open(QHNow)
-            else:
-                BG.resume_last()
-        elif i == 1:
-            self.open_hub(0)
-        elif i == 2:
-            self.open_hub(2)
-        elif i == 3:
-            self.open_hub(1)
-        elif i == 4:
-            rp = BG.cfg.get("reader_pos") or {}
-            if rp.get("n"):
-                self.session.open(QHReader, rp["n"], rp.get("mode", "mushaf"), rp.get("pg", 0), rp.get("taf"))
-            else:
-                self.pick_surah("mushaf")
-        elif i == 5:
-            self.pick_surah("tafsir")
-        elif i == 6:
-            studio_hifz(self.session)
-        elif i == 7:
-            studio_khatma(self.session)
-        elif i == 8:
-            studio_adhkar_menu(self.session)
-        elif i == 9:
-            self.open_hub(None, "tv")
-        elif i == 10:
-            text = BG.prayer_table()
-            try:
-                from Screens.MessageBox import MessageBox
-                self.session.open(MessageBox, text, MessageBox.TYPE_INFO)
-            except Exception:
-                pass
-        elif i == 11:
-            studio_more(self.session)
+    def ok(self):
+        r, c = self.hm_row, self.hm_col
+        if r == 0:
+            if c == 1:
+                self.open_hub(1)
+            elif c == 2:
+                self.session.open(QHMushaf, (BG.cfg.get("mushaf_page") or 1))
+            elif c == 3:
+                self.pick_surah("tafsir")
+            elif c == 4:
+                self.open_hub(0)
+        elif r == 1:
+            if c == 0:
+                self.resume()
+            elif c == 1:
+                cur = BG.verse_now()
+                n = cur[0] if cur else extras.surah_of_title((BG.cfg.get("resume") or {}).get("title") or u"")
+                if n:
+                    self.session.open(QHReader, n, "tafsir")
+                else:
+                    self.pick_surah("tafsir")
+            elif c == 2:
+                self.fav_toggle()
+        elif r == 2:
+            k = self.hm_rec_off + c
+            if k < len(self.hm_recs):
+                self.hm_chosen = k
+                self.hm_row, self.hm_col = 3, 0
+                self.paint()
+                BG.set_status(u"اختر السورة بصوت %s" % self.hm_recs[k][0])
+        elif r == 3:
+            self.play_surah(self.hm_sur_off + c + 1)
+
+    def fav_toggle(self):
+        _k, _t, _l, rec = self.hero_info()
+        if not rec:
+            return BG.set_status(u"لا يوجد قارئ لإضافته")
+        key = ["mp3q_reciters", rec]
+        favs = BG.cfg.setdefault("fav", [])
+        if key in favs:
+            favs.remove(key)
+            BG.set_status(u"أُزيل من المفضلة: %s" % rec)
+        else:
+            favs.insert(0, key)
+            BG.set_status(u"★ أُضيف إلى المفضلة: %s" % rec)
+        BG.save()
+
+    def play_surah(self, n):
+        if not self.hm_recs:
+            return self.pick_surah("mushaf")
+        label, entry = self.hm_recs[min(self.hm_chosen, len(self.hm_recs) - 1)]
+        BG.set_status(u"جاري تجهيز سورة %s بصوت %s ..." % (data.surah_name(n), label))
+
+        def got(rows):
+            if isinstance(rows, Exception) or not rows:
+                return BG.set_status(u"تعذّر تحميل سور القارئ", notify=True)
+            items = [x for _l, x in rows if x is not None and (x.get("url") or x.get("resolve"))]
+            idx = [i for i, x in enumerate(items) if x.get("n") == n]
+            if not idx:
+                return BG.set_status(u"هذه السورة غير متاحة بصوت %s" % label, notify=True)
+            BG.ctx = {"sec": "mp3q_reciters", "label": label}
+            BG.play_list(items, idx[0])
+            self.hm_hero = None
+        self.qh_runner.run(lambda: subs_for(entry), got, got)
 
     def pick_surah(self, mode):
         try:
             from Screens.ChoiceBox import ChoiceBox
-            n0 = 0
-            if Player.active:
-                n0 = extras.surah_of_title(Player.cur_title) or 0
             opts = [(u"%d. %s" % (i, data.surah_name(i)), i) for i in range(1, 115)]
-            if n0:
-                opts.insert(0, (u"سورة التلاوة الحالية: %s" % data.surah_name(n0), n0))
             self.session.openWithCallback(lambda c: c and self.session.open(QHReader, c[1], mode),
-                                          ChoiceBox, title=u"اختر السورة", list=opts)
+                                          ChoiceBox, title=i18n.T(u"اختر السورة"), list=opts)
         except Exception as e:
             qlog("home pick: %s" % e)
-            popup(u"تعذّر فتح قائمة السور: %s" % e, 8)
+
 
 
 class QHNow(Screen):
@@ -10816,68 +11588,108 @@ class QHNow(Screen):
 
 
 class QHPlayer(Screen):
-    """The big player: the reciter's picture large, the ayah being recited, a progress bar and every
-    control on the remote (seek, jump to %, speed, A-B repeat, ayah repeat, bookmarks)."""
-    HINT = (u"OK إيقاف/تشغيل • ◀▶ 10 ث • ▲▼ دقيقة • 1-9 قفز % • 0 تكرار A-B • أحمر/أخضر السابق/التالي • "
-            u"أصفر السرعة • أزرق علامة • MENU المزيد")
+    """3.0 player (mock-up 1): the reciter card with the wave and the controls, the tafsir of the ayah
+    being recited, and the surah with that ayah highlighted.
+    OK pause • ◀▶ 10 s • ▲▼ 1 min • CH+/CH- next / previous • 1-9 jump % • 0 A-B • MENU more."""
+    HINT = (u"OK إيقاف/تشغيل • ◀▶ 10 ث • ▲▼ دقيقة • CH± السابق/التالي • 1-9 قفز % • 0 تكرار A-B • "
+            u"أحمر تصغير • أخضر إيقاف مؤقت • أصفر التفسير • أزرق تكرار الآية • MENU المزيد")
+    VROWS = 7
 
     def __init__(self, session):
         BG.attach(session)
         th = THEMES[BG.theme_idx()]
         self.qp_th = th
-        bg = "#06090d"
-        o = [u'<screen name="QuranHubPlayer" position="0,0" size="%d,%d" flags="wfNoBorder" backgroundColor="%s">' % (
-            p(1280), p(720), bg)]
-        o.append(u'<eLabel position="%d,%d" size="%d,%d" backgroundColor="%s" />' % (p(40), p(60), p(470), p(470), th["panel"]))
-        o.append(u'<widget name="qp_letter" position="%d,%d" size="%d,%d" font="Regular;%d" halign="center" valign="center" '
-                 u'foregroundColor="#ffffff" backgroundColor="%s" zPosition="2" />' % (p(55), p(75), p(440), p(440), p(220), th["sel"]))
-        o.append(u'<widget name="qp_pix" position="%d,%d" size="%d,%d" alphatest="on" scale="1" zPosition="3" />' % (
-            p(55), p(75), p(440), p(440)))
-        o.append(u'<widget name="qp_rec" position="%d,%d" size="%d,%d" font="Regular;%d" halign="right" valign="center" '
-                 u'foregroundColor="#ffffff" backgroundColor="%s" transparent="1" />' % (p(540), p(60), p(700), p(70), p(46), bg))
-        o.append(u'<widget name="qp_sub" position="%d,%d" size="%d,%d" font="Regular;%d" halign="right" valign="center" '
-                 u'foregroundColor="%s" backgroundColor="%s" transparent="1" />' % (p(540), p(135), p(700), p(50), p(32), _hex(th["gold"]), bg))
-        o.append(u'<widget name="qp_ayah" position="%d,%d" size="%d,%d" scrollbarMode="showNever" backgroundColor="%s" '
-                 u'backgroundColorSelected="%s" transparent="1" />' % (p(540), p(200), p(700), p(240), bg, bg))
-        o.append(u'<eLabel position="%d,%d" size="%d,%d" backgroundColor="%s" />' % (p(540), p(460), p(700), p(12), th["head"]))
-        o.append(u'<widget name="qp_fill" position="%d,%d" size="%d,%d" backgroundColor="%s" zPosition="2" />' % (
-            p(540), p(460), p(2), p(12), th["line"]))
-        o.append(u'<widget name="qp_time" position="%d,%d" size="%d,%d" font="Regular;%d" halign="center" valign="center" '
-                 u'foregroundColor="#ffffff" backgroundColor="%s" transparent="1" />' % (p(540), p(480), p(700), p(40), p(26), bg))
-        o.append(u'<widget name="qp_state" position="%d,%d" size="%d,%d" font="Regular;%d" halign="center" valign="center" '
-                 u'foregroundColor="%s" backgroundColor="%s" transparent="1" />' % (p(40), p(560), p(1200), p(40), p(24), _hex(th["gold"]), bg))
-        o.append(u'<widget name="qp_status" position="%d,%d" size="%d,%d" font="Regular;%d" halign="center" valign="center" '
-                 u'foregroundColor="%s" backgroundColor="%s" transparent="1" />' % (p(40), p(605), p(1200), p(34), p(20), th["dim"], bg))
-        o.append(u'<widget name="qp_hint" position="%d,%d" size="%d,%d" font="Regular;%d" halign="center" valign="center" '
-                 u'foregroundColor="%s" backgroundColor="%s" transparent="1" />' % (p(20), p(668), p(1240), p(34), p(16), th["dim"], bg))
-        o.append(u'</screen>')
-        self.skin = u"".join(o)
+        self.skin = self._skin(th)
         Screen.__init__(self, session)
-        self.skinName = "QuranHubPlayer"
-        for n in ("qp_letter", "qp_rec", "qp_sub", "qp_time", "qp_state", "qp_status", "qp_fill"):
+        self.skinName = "QuranHubPlayer3"
+        for n in ("qp_letter", "qp_rec", "qp_sub", "qp_time", "qp_state", "qp_status", "qp_fill", "qp_crumb", "qp_brand",
+                  "qp_t1", "qp_t2", "qp_tf_title", "qp_tf_name", "qp_tf_text", "qp_tf_note", "qp_b0", "qp_b1", "qp_b2", "qp_b3"):
             self[n] = Label(u"")
         self["qp_hint"] = Label(self.HINT)
-        self["qp_pix"] = Pixmap()
+        for n in ("qp_pix", "qp_wave", "qp_btn", "qp_title"):
+            self[n] = Pixmap()
         lst = MenuList([], False, eListboxPythonMultiContent)
         lst.l.setFont(0, gFont("Regular", p(30)))
-        lst.l.setItemHeight(p(60))
+        lst.l.setFont(1, gFont("Regular", p(17)))
+        lst.l.setItemHeight(p(63))
         self["qp_ayah"] = lst
         self.qp_title = None
         self.qp_img = None
         self.qp_verse = None
+        self.qp_wave_pct = None
+        self.qp_paused = None
         self.qp_runner = Runner()
         acts = {"cancel": self.close, "ok": BG.toggle_pause,
                 "left": lambda: self.seek(-10), "right": lambda: self.seek(10),
                 "up": lambda: self.seek(60), "down": lambda: self.seek(-60),
-                "red": lambda: BG.step(-1), "green": lambda: BG.step(1),
-                "yellow": self.speed_menu, "blue": BG.mark_add, "mainMenu": self.menu, "0": BG.ab_key}
+                "red": self.close, "green": BG.toggle_pause, "yellow": self.tafsir_open,
+                "blue": lambda: BG.repeat_ayah(3), "mainMenu": self.menu, "0": BG.ab_key,
+                "nextBouquet": lambda: BG.step(1), "prevBouquet": lambda: BG.step(-1)}
         for i in range(1, 10):
             acts[str(i)] = (lambda k=i: self.jump(k * 10))
         self["actions"] = ActionMap(["OkCancelActions", "DirectionActions", "ColorActions", "NumberActions",
-                                     "InfobarMenuActions"], acts, -1)
+                                     "InfobarMenuActions", "ChannelSelectBaseActions"], acts, -1)
         self.qp_timer, self._c = make_timer(self.refresh)
         self.onLayoutFinish.append(self.start)
         self.onClose.append(self.cleanup)
+
+    @staticmethod
+    def _skin(th):
+        light = th["layout"] == 9
+        bg = th["bg"]
+        pan = th["panel"]
+        brd = th["border"]
+        txt, dim, gold = th["text"], th["dim"], _hex(th["gold"])
+        taf = th.get("taf", "#12160d") if not light else "#fbf6ea"
+        tafb = th.get("tafb", "#2b3119") if not light else th["paper_line"]
+        o = [u'<screen name="QuranHubPlayer3" position="0,0" size="%d,%d" flags="wfNoBorder" backgroundColor="%s">\n'
+             % (p(1280), p(720), bg)]
+        # header: back tile, crumbs, brand, status
+        o.append(_img(ui_png(ui.chevron_tile, p(48), pan, txt), 1202, 22, 48, 48))
+        o.append(_w("qp_crumb", 720, 22, 470, 48, 20, txt, bg))
+        o.append(_w("qp_brand", 520, 18, 190, 56, 22, gold, bg))
+        o.append(_w("qp_status", 30, 18, 480, 28, 15, dim, bg, halign="left"))
+        o.append(_w("qp_state", 30, 46, 480, 26, 15, gold, bg, halign="left"))
+        # player card
+        o.append(_card_img(30, 84, 436, 280, 22, pan, brd, 1))
+        o.append(_img(ui_png(ui.card, p(66), p(66), p(16), th.get("tile2", "#3a2e10")), 380, 102, 66, 66, 2))
+        o.append(_w("qp_letter", 380, 102, 66, 66, 26, gold, th.get("tile2", "#3a2e10"), halign="center"))
+        o.append(u'<widget name="qp_pix" position="%d,%d" size="%d,%d" alphatest="on" scale="1" zPosition="4" />\n' % (
+            p(380), p(102), p(66), p(66)))
+        o.append(_w("qp_rec", 50, 100, 320, 40, 26, txt, pan))
+        o.append(_w("qp_sub", 50, 140, 320, 28, 15, dim, pan))
+        o.append(_pixw("qp_wave", 50, 184, 396, 56, z=2))
+        o.append(_w("qp_t1", 50, 246, 80, 24, 15, dim, pan, halign="left"))
+        o.append(_w("qp_t2", 366, 246, 80, 24, 15, dim, pan, halign="right"))
+        o.append(_img(ui_png(ui.disc, p(52), th.get("chip", "#1a2230"), None, 0, "next", txt), 152, 290, 52, 52, 2))
+        o.append(_pixw("qp_btn", 206, 274, 86, 86, z=2))
+        o.append(_img(ui_png(ui.disc, p(52), th.get("chip", "#1a2230"), None, 0, "prev", txt), 296, 290, 52, 52, 2))
+        # tafsir card
+        o.append(_card_img(30, 380, 436, 262, 22, taf, tafb, 1))
+        o.append(_w("qp_tf_title", 50, 394, 396, 40, 22, txt, taf))
+        o.append(_card_img(50, 400, 130, 30, 9, th.get("chip", "#1e2416"), tafb, 1, z=2))
+        o.append(_w("qp_tf_name", 52, 400, 126, 30, 13, dim, th.get("chip", "#1e2416"), halign="center", z=3))
+        o.append(u'<widget name="qp_tf_text" position="%d,%d" size="%d,%d" font="Regular;%d" halign="right" valign="top" '
+                 u'foregroundColor="%s" backgroundColor="%s" transparent="1" zPosition="3" />\n' % (
+                     p(50), p(442), p(396), p(156), p(19), txt, taf))
+        o.append(_w("qp_tf_note", 50, 604, 396, 26, 13, dim, taf))
+        # the surah card
+        o.append(_card_img(486, 84, 764, 558, 24, pan, brd, 1))
+        o.append(u'<eLabel position="%d,%d" size="%d,%d" backgroundColor="%s" zPosition="2" />\n' % (p(516), p(136), p(240), 1, brd))
+        o.append(u'<eLabel position="%d,%d" size="%d,%d" backgroundColor="%s" zPosition="2" />\n' % (p(990), p(136), p(232), 1, brd))
+        o.append(_pixw("qp_title", 760, 98, 226, 76, z=3))
+        sel = ui_png(ui.card, p(716), p(63), p(14), th.get("vsel", "#22281a"), None, 1)
+        o.append(_list("qp_ayah", 510, 184, 716, 446, pan, txt, sel))
+        # buttons
+        for i, col in enumerate(("#e05a52", "#3fbf73", "#e2b53a", "#4d7cf0")):
+            x = 1250 - 296 - i * 308
+            o.append(_card_img(x, 656, 296, 46, 14, pan, brd, 1))
+            o.append(_img(ui_png(ui.dash, p(34), p(8), col), x + 224, 675, 34, 8, 2))
+            o.append(_w("qp_b%d" % i, x + 10, 656, 206, 46, 19, txt, pan, halign="center"))
+        for n in ("qp_time", "qp_fill", "qp_hint"):
+            o.append(_hide(n))
+        o.append(u"</screen>")
+        return u"".join(o)
 
     def start(self):
         BG.hide_minibar()
@@ -10886,6 +11698,10 @@ class QHPlayer(Screen):
         except Exception:
             pass
         self["qp_pix"].hide()
+        self["qp_brand"].setText(PLUGIN_NAME)
+        for i, t in enumerate((u"تصغير", u"تشغيل / إيقاف مؤقت", u"التفسير", u"تكرار الآية")):
+            self["qp_b%d" % i].setText(i18n.T(t))
+        self["qp_tf_note"].setText(i18n.T(u"من التفسير المعتمد داخل البلوجين"))
         self.refresh(True)
         self.qp_timer.start(500, False)
 
@@ -10903,6 +11719,13 @@ class QHPlayer(Screen):
             return BG.set_status(u"القفز يعمل مع السور (ليس البث المباشر)")
         BG.seek(pp[1] * pct / 100.0 - pp[0])
 
+    def tafsir_open(self):
+        cur = BG.verse_now()
+        if cur:
+            self.session.open(QHReader, cur[0], "tafsir")
+        else:
+            BG.set_status(u"التفسير يظهر مع السور")
+
     def speed_menu(self):
         cur = BG.cur_speed()
         opts = [((u"×%s%s" % (BG._sp(s), u"  ✓" if abs(s - cur) < 0.01 else u"")) +
@@ -10912,6 +11735,8 @@ class QHPlayer(Screen):
     def _choice(self, title, opts, cb):
         try:
             from Screens.ChoiceBox import ChoiceBox
+            if i18n.on():
+                title, opts = i18n.T(title), [(i18n.T(o[0]),) + tuple(o[1:]) for o in opts]
             self.session.openWithCallback(cb, ChoiceBox, title=title, list=opts)
         except Exception as e:
             qlog("player menu: %s" % e)
@@ -10923,8 +11748,9 @@ class QHPlayer(Screen):
               (u"تكرار الآية الحالية 10 مرات", lambda: BG.repeat_ayah(10)),
               (u"تكرار مقطع A-B (زر 0)", BG.ab_key),
               (u"إيقاف التكرار", BG.ab_clear),
-              (u"🔖 حفظ علامة هنا (أزرق)", BG.mark_add),
+              (u"🔖 حفظ علامة هنا", BG.mark_add),
               (u"🔖 علاماتي (%d) ..." % len(BG.cfg.get("marks", [])), self.marks),
+              (u"التالي (CH+)", lambda: BG.step(1)), (u"السابق (CH-)", lambda: BG.step(-1)),
               (u"وضع التلاوة السينمائي", lambda: self.session.open(QHCinema)),
               (u"مشاركة الآية (QR)", lambda: BG.verse_now() and open_share(self.session, *BG.verse_now())),
               (u"⏹ إيقاف التشغيل", lambda: (BG.stop_play(), self.close()))]
@@ -10933,17 +11759,33 @@ class QHPlayer(Screen):
     def marks(self):
         ms = BG.cfg.get("marks", [])
         if not ms:
-            return BG.set_status(u"لا توجد علامات - اضغط الأزرق أثناء التلاوة")
+            return BG.set_status(u"لا توجد علامات - احفظ علامة من قائمة المشغّل")
         self._choice(u"علاماتي", [(m["name"], m) for m in ms], lambda c: c and BG.mark_play(c[1]))
 
     def refresh(self, force=False):
+        th = self.qp_th
         title = Player.cur_title if Player.active else None
+        cur = BG.verse_now() if Player.active else None
         if title != self.qp_title or force:
             self.qp_title = title
             rec, sub = QHNow.split_title(title)
-            self["qp_rec"].setText(rec or u"لا يوجد تشغيل")
-            self["qp_sub"].setText(sub)
-            self["qp_letter"].setText((rec or u"؟")[:1])
+            self["qp_rec"].setText(rec or i18n.T(u"لا يوجد تشغيل"))
+            bits = []
+            if BG.cur_live:
+                bits.append(u"بث مباشر")
+            else:
+                bits.append(u"تلاوة")
+            item = BG.pl[BG.pi] if BG.pl and 0 <= BG.pi < len(BG.pl) else {}
+            if item.get("ayah") or item.get("qdc") or BG.exact_ayah(extras.surah_of_title(title or u"") or 0):
+                bits.append(u"بتزامن الآيات")
+            ext = os.path.splitext((BG.real_url(BG.cur_url) or u"").split("?")[0])[1].lstrip(".").upper()
+            if ext in ("MP3", "FLAC", "M4A", "OGG", "OPUS", "WAV", "AAC"):
+                bits.append(ext)
+            self["qp_sub"].setText(u" · ".join(bits))
+            self["qp_letter"].setText(ui.initials(rec) if rec else u"؟")
+            n = (cur[0] if cur else None) or extras.surah_of_title(title or u"")
+            crumbs = [i18n.T(u"مكتبة القراء")] + ([rec] if rec else []) + ([u"سورة %s" % data.surah_name(n)] if n else ([sub] if sub else []))
+            self["qp_crumb"].setText(u" ‹ ".join(crumbs))
             base = (rec or u"").split(u"  ×")[0]
             if base and base != self.qp_img:
                 self.qp_img = base
@@ -10952,11 +11794,24 @@ class QHPlayer(Screen):
                 self.qp_runner.run(lambda r=base: data.reciter_image(r), lambda r, k=base: self.img_loaded(r, k),
                                    lambda e: None)
         pct, txt = BG.progress()
-        try:
-            self["qp_fill"].instance.resize(eSize(max(2, int(p(700) * pct / 100.0)), p(12)))
-        except Exception:
-            pass
+        pp = BG.play_pos() if Player.active and not BG.cur_live else None
+        self["qp_t1"].setText(BG._mmss(int(pp[1])) if pp and pp[1] > 0 else u"")
+        self["qp_t2"].setText(BG._mmss(int(pp[0])) if pp else (txt or u""))
         self["qp_time"].setText(txt or u"")
+        q = int(pct / 2) * 2
+        if q != self.qp_wave_pct or force:
+            self.qp_wave_pct = q
+            pix = ui_pix(ui.waveform, p(396), p(56), 44, q / 100.0, _hex(th["gold"]), th.get("track", "#2a3442"))
+            if pix is not None:
+                self["qp_wave"].instance.setPixmap(pix)
+                self["qp_wave"].show()
+        paused = BG.is_paused() or not Player.active
+        if paused != self.qp_paused or force:
+            self.qp_paused = paused
+            pix = ui_pix(ui.disc, p(86), _hex(th["gold"]), "#ffffff", max(2, p(4)), "play" if paused else "pause", "#14110a")
+            if pix is not None:
+                self["qp_btn"].instance.setPixmap(pix)
+                self["qp_btn"].show()
         st = []
         sp = BG.cur_speed()
         if abs(sp - 1.0) > 0.01 or abs(BG.speed_want - 1.0) > 0.01:
@@ -10964,39 +11819,94 @@ class QHPlayer(Screen):
         if BG.ab:
             st.append(u"🔁 تكرار %s ← %s%s" % (BG._mmss(int(BG.ab["a"])), BG._mmss(int(BG.ab["b"])),
                                                (u" (%d)" % (BG.ab["left"] + 1)) if BG.ab["left"] >= 0 else u""))
-        if BG.is_paused():
-            st.append(u"⏸ متوقف مؤقتاً")
         if BG.upnext:
             st.append(u"التالي: %d" % len(BG.upnext))
         self["qp_state"].setText(u"   •   ".join(st))
         self["qp_status"].setText(BG.status or u"")
-        self.show_verse()
+        self.show_verse(cur)
 
-    def show_verse(self):
+    def show_verse(self, cur=None):
+        """The surah card: seven ayat around the one being recited (that one highlighted) + its tafsir."""
         try:
-            cur = BG.verse_now() if img_text() else None
             if cur == self.qp_verse:
                 return
             self.qp_verse = cur
+            th = self.qp_th
             if not cur:
-                return self["qp_ayah"].setList([])
+                self["qp_ayah"].setList([])
+                self["qp_title"].hide()
+                self["qp_tf_title"].setText(i18n.T(u"التفسير"))
+                self["qp_tf_text"].setText(i18n.T(u"يظهر هنا تفسير الآية التي تُتلى (مع السور).") if Player.active else u"")
+                return
             n, a = cur
-            text = u"%s (%s)" % (extras.sanitize(dict(extras.local_verses(n) or []).get(a, u"")), extras.ar_num(a))
-            w, h = p(700), p(60)
-            px = int(h / 1.85)
-            lines = extras.wrap_lines([text], 40, meas=(lambda s: qtext.line_width(s, px), w - p(10),
-                                                        qtext.atlas(px)["space"]))[:4]
+            hT = p(76)
+            pix, iw = text_pixmap(u"سُورَةُ %s" % data.surah_name(n), int(hT / 1.85), th["gold"], hT)
+            if pix is not None:
+                self["qp_title"].instance.setPixmap(pix)
+                self["qp_title"].instance.resize(eSize(iw, hT))
+                self["qp_title"].instance.move(ePoint(p(868) - iw // 2, p(98)))
+                self["qp_title"].show()
+            verses = dict(extras.local_verses(n) or [])
+            total = studio.ayah_counts()[n - 1]
+            first = max(1, min(a - 3, total - self.VROWS + 1))
+            w, h = p(716), p(63)
             rows = []
-            for i, ln in enumerate(lines):
-                cols = line_tajweed(ln, lines[i + 1] if i + 1 < len(lines) else u"") if tajweed_on() else None
-                rows.append([None] + img_entry(ln, w, h, 0xf4ecd2, align="right", colors=cols))
+            for k in range(first, min(total, first + self.VROWS - 1) + 1):
+                rows.append(self.verse_row(n, k, verses.get(k, u""), k == a, w, h))
             self["qp_ayah"].setList(rows)
             try:
-                self["qp_ayah"].instance.setSelectionEnable(0)
+                self["qp_ayah"].moveToIndex(a - first)
             except Exception:
                 pass
+            self.tafsir_of(n, a)
         except Exception as e:
             qlog("player verse: %r" % (e,))
+
+    def verse_row(self, n, k, text, current, w, h):
+        th = self.qp_th
+        d = p(44)
+        ring = ui_pix(ui.ringdisc, d, th["panel"], _hex(th["gold"]) if current else th.get("numb", "#3a4554"), max(1, p(2)))
+        row = [(n, k)]
+        x0 = w - d - p(14)
+        if ring is not None:
+            row.append(_PixEntry(pos=(x0, (h - d) // 2), size=(d, d), png=ring))
+        num_col = th["gold"] if current else _rgbint(th["dim"])
+        row.append(MultiContentEntryText(pos=(x0, (h - d) // 2), size=(d, d), font=1, flags=RT_HALIGN_CENTER | RT_VALIGN_CENTER,
+                                         text=u"%d" % k, color=num_col, color_sel=num_col))
+        avail = x0 - p(24)
+        hh = p(54)
+        px = int(hh / 1.85)
+        words = extras.sanitize(text).split()
+        out = []
+        for w_ in words:
+            if qtext.line_width(u" ".join(out + [w_]), px) > avail - p(30):
+                out.append(u"…")
+                break
+            out.append(w_)
+        line = u" ".join(out)
+        col = th.get("ayah", 0xf2e6c4) if current else _rgbint(th["dim"])
+        row += img_entry(line, avail, h, col, px=px, colors=(line_tajweed(line) if current and tajweed_on() else None))
+        return row
+
+    def tafsir_of(self, n, a):
+        key = BG.cfg.get("tafsir") or "muyassar"
+        names = dict((k, nm) for k, nm, _a, _b, _c, _d in extras.TAFSIRS)
+        self["qp_tf_title"].setText(u"%s · %s %d" % (i18n.T(u"التفسير"), i18n.T(u"الآية"), a))
+        self["qp_tf_name"].setText(names.get(key, names["muyassar"]))
+        try:
+            arr = extras.local_tafsir(key, n) or extras.local_tafsir("muyassar", n)
+            t = u""
+            if isinstance(arr, list) and 0 < a <= len(arr):
+                t = arr[a - 1]
+            elif isinstance(arr, dict):
+                t = arr.get(str(a)) or u""
+            if u"[التفسير]" in t:
+                t = t.split(u"[التفسير]", 1)[1]
+            t = u" ".join(t.split())
+            self["qp_tf_text"].setText(t[:240] + (u"…" if len(t) > 240 else u"") if t else
+                                       i18n.T(u"التفسير غير موجود على الجهاز لهذه السورة"))
+        except Exception as e:
+            qlog("player tafsir: %r" % (e,))
 
     def img_loaded(self, path, rec):
         if isinstance(path, Exception) or not path or rec != self.qp_img:
