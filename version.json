@@ -1,8 +1,8 @@
 {
-  "version": "2.0.1",
-  "ipk": "https://raw.githubusercontent.com/Saadmelshepiny/SaadQuranHub/main/ipk/enigma2-plugin-extensions-saadquranhub_2.0.1_all.ipk",
-  "sha256": "1c247a903519a6db415a9c8eac31aa29202f858f18d1de2ea8ba5970d879b1ba",
-  "ipk_lite": "https://raw.githubusercontent.com/Saadmelshepiny/SaadQuranHub/main/ipk/enigma2-plugin-extensions-saadquranhub-lite_2.0.1_all.ipk",
-  "sha256_lite": "8c39f35afe6273ec7621d7ea180e6a429850047b2f9bbf9c2d3d938d45eb6313",
-  "notes": "الشاشة لا تتوقف أثناء التلاوة (رسم الآيات في الخلفية) • تظليل الآية فقط مع التوقيت الدقيق، وإلا علامة ≈ • تزامن أدق"
+  "version": "2.0.2",
+  "ipk": "https://raw.githubusercontent.com/Saadmelshepiny/SaadQuranHub/main/ipk/enigma2-plugin-extensions-saadquranhub_2.0.2_all.ipk",
+  "sha256": "e09190b73b0ad4694bd639c4a14aa731ba8eaf1e3aa1b28a5091558fb732cce8",
+  "ipk_lite": "https://raw.githubusercontent.com/Saadmelshepiny/SaadQuranHub/main/ipk/enigma2-plugin-extensions-saadquranhub-lite_2.0.2_all.ipk",
+  "sha256_lite": "a9d87be05127440244a3e010cb444870955496398c867ac390ab8d889486a6e7",
+  "notes": "زر INFO يخفي أزرار الألوان أسفل الشاشة ويظهرها فتكبر اللوحات"
 }

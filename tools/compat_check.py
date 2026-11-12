@@ -17,6 +17,8 @@ ANY_OF = {"InfobarMenuActions": ("InfobarMenuActions", "MenuActions")}
 if os.environ.get("SQH_OLD_MENU"):          # check a build from before 2.0.2 (no MenuActions fallback)
     ANY_OF = {}
 NUMBERS = set("0123456789")
+# names of the same key on different images: the plugin binds all of them, one is enough
+SAME_KEY = ({"showEventInfo", "InfoPressed", "info"},)
 
 
 def keymap(e2):
@@ -116,6 +118,9 @@ def check(plugin, e2):
                 sent |= NUMBERS
             if "InfobarMenuActions" in ctxs and ANY_OF:
                 sent |= {"mainMenu", "menu"}
+            for grp in SAME_KEY:
+                if sent & grp & keys:
+                    sent |= grp
             for k in sorted(keys - sent):
                 if k.isdigit():
                     continue

@@ -86,7 +86,7 @@ from . import packs
 from . import house
 from . import ui
 
-PLUGIN_VERSION = "2.0.1"
+PLUGIN_VERSION = "2.0.2"
 GITHUB_REPO = "Saadmelshepiny/SaadQuranHub"
 GITHUB_INFO = "https://raw.githubusercontent.com/%s/main/version.json" % GITHUB_REPO
 
@@ -588,6 +588,16 @@ def _list(name, x, y, w, h, bg, fg, sel_png, z=3):
             u'zPosition="%d"%s />\n' % (name, p(x), p(y), p(w), p(h), bg, fg, bg, fg, z, sp))
 
 
+def v3_dy(layout=None):
+    """3.0.2: the colour buttons at the bottom can be hidden (INFO); the panels then grow by this much
+    (in 1280x720 units)."""
+    if not BG.cfg.get("hide_keys"):
+        return 0
+    if layout is None:
+        layout = THEMES[BG.theme_idx()]["layout"]
+    return 52 if layout == 9 else 48
+
+
 V3_BTN = (("qh_red", "#e05a52"), ("qh_green", "#3fbf73"), ("qh_yellow", "#e2b53a"), ("qh_blue", "#4d7cf0"))
 
 
@@ -612,8 +622,9 @@ def _skin_studio(th):
     # three panels (sections | reciters | surahs)
     cols = [(956, 310), (356, 588), (14, 330)]
     rows = GEO["rows"]
+    dy = v3_dy(8)
     for i, (x, w) in enumerate(cols):
-        o.append(_card_img(x, 88, w, 474, 20, pan, brd, 1, z=1))
+        o.append(_card_img(x, 88, w, 474 + dy, 20, pan, brd, 1, z=1))
         small = i == 0
         o.append(_w(HDRS[i], x + 20, 100, w - 40, 40 if not small else 30, 26 if not small else 18,
                     txt if not small else dim, pan))
@@ -621,26 +632,29 @@ def _skin_studio(th):
         top = 150 if not small else 136
         sel = ui_png(ui.card, p(w - 24), rows[i], p(14), th["sel"] if i != 2 else th["sel2"],
                      gold if i != 2 else None, max(1, p(2)))
-        o.append(_list(NAMES[i], x + 12, top, w - 24, 562 - top - 12, pan, txt, sel))
+        o.append(_list(NAMES[i], x + 12, top, w - 24, 562 + dy - top - 12, pan, txt, sel))
     # now playing bar
-    o.append(_card_img(14, 572, 1252, 88, 20, pan, brd, 1, z=1))
-    o.append(_pixw("qh_np_btn", 1196, 588, 56, 56))
-    o.append(_w("qh_np_title", 880, 584, 306, 32, 22, txt, pan))
-    o.append(_w("qh_np_sub", 880, 616, 306, 26, 16, dim, pan))
-    o.append(_pixw("qh_np_ayah", 84, 576, 780, 50))
-    o.append(_w("qh_np_t1", 22, 626, 58, 26, 15, dim, pan, halign="left"))
-    o.append(_w("qh_np_t2", 866, 626, 60, 26, 15, dim, pan, halign="right"))
+    o.append(_card_img(14, 572 + dy, 1252, 88, 20, pan, brd, 1, z=1))
+    o.append(_pixw("qh_np_btn", 1196, 588 + dy, 56, 56))
+    o.append(_w("qh_np_title", 880, 584 + dy, 306, 32, 22, txt, pan))
+    o.append(_w("qh_np_sub", 880, 616 + dy, 306, 26, 16, dim, pan))
+    o.append(_pixw("qh_np_ayah", 84, 576 + dy, 780, 50))
+    o.append(_w("qh_np_t1", 22, 626 + dy, 58, 26, 15, dim, pan, halign="left"))
+    o.append(_w("qh_np_t2", 866, 626 + dy, 60, 26, 15, dim, pan, halign="right"))
     o.append(u'<eLabel position="%d,%d" size="%d,%d" backgroundColor="%s" zPosition="2" />\n' % (
-        p(84), p(637), p(780), max(2, p(4)), th["track"]))
+        p(84), p(637 + dy), p(780), max(2, p(4)), th["track"]))
     o.append(u'<widget name="qh_np_fill" position="%d,%d" size="%d,%d" backgroundColor="%s" zPosition="3" />\n' % (
-        p(864), p(637), p(2), max(2, p(4)), gold))
+        p(864), p(637 + dy), p(2), max(2, p(4)), gold))
+    hidden = [n for n, _c in V3_BTN] + ["qh_theme", "qh_sleep", "qh_fmt"] if dy else []
+    for name in hidden:                      # buttons hidden (INFO shows them again)
+        o.append(_hide(name))
     # buttons and chips
-    for i, (name, col) in enumerate(V3_BTN):
+    for i, (name, col) in enumerate(V3_BTN if not dy else ()):
         x = 1066 - i * 210
         o.append(_card_img(x, 670, 200, 38, 12, pan, brd, 1, z=1))
         o.append(_img(ui_png(ui.dot, p(12), col), x + 168, 683, 12, 12, 2))
         o.append(_w(name, x + 10, 670, 150, 38, 18, txt, pan, halign="center"))
-    for i, name in enumerate(("qh_theme", "qh_sleep", "qh_fmt")):
+    for i, name in enumerate(("qh_theme", "qh_sleep", "qh_fmt") if not dy else ()):
         x = 14 + i * 140
         o.append(_card_img(x, 670, 132, 38, 12, pan, brd, 1, z=1))
         o.append(_w(name, x + 6, 670, 120, 38, 14, dim, pan, halign="center"))
@@ -658,6 +672,7 @@ def _skin_light(th):
     bg, side, txt, dim, gold = th["bg"], th["bar"], th["text"], th["dim"], _hex(th["gold"])
     card, brd = th["panel"], th["border"]
     rows = GEO["rows"]
+    dy = v3_dy(9)
     o = [u'<screen name="QuranHub" position="0,0" size="%d,%d" flags="wfNoBorder" backgroundColor="%s" title="القرآن الكريم">\n'
          % (W, H, bg)]
     # side bar
@@ -665,10 +680,14 @@ def _skin_light(th):
     o.append(_img(ui_png(ui.gear_tile, p(46), side, side, th["line"]), 1214, 30, 46, 46))
     o.append(_w("qh_title", 1040, 16, 170, 74, 26, "#ffffff", side, valign="center"))
     sel0 = ui_png(ui.card, p(226), rows[0], p(14), th["side_sel"], None, 1)
-    o.append(_list(NAMES[0], 1040, 112, 226, 520, side, "#ffffff", sel0))
-    o.append(_card_img(1040, 648, 226, 54, 14, side, th["side_line"], 1, z=1))
-    o.append(_w("qh_theme", 1050, 648, 100, 54, 14, "#e8efe9", side, halign="center"))
-    o.append(_w("qh_sleep", 1150, 648, 106, 54, 14, "#e8efe9", side, halign="center"))
+    o.append(_list(NAMES[0], 1040, 112, 226, 520 + (72 if dy else 0), side, "#ffffff", sel0))
+    if dy:
+        o.append(_hide("qh_theme"))
+        o.append(_hide("qh_sleep"))
+    else:
+        o.append(_card_img(1040, 648, 226, 54, 14, side, th["side_line"], 1, z=1))
+        o.append(_w("qh_theme", 1050, 648, 100, 54, 14, "#e8efe9", side, halign="center"))
+        o.append(_w("qh_sleep", 1150, 648, 106, 54, 14, "#e8efe9", side, halign="center"))
     # titles and search
     o.append(_w(HDRS[1], 420, 18, 590, 54, 36, txt, bg))
     o.append(_w("qh_c1", 420, 72, 590, 28, 17, dim, bg))
@@ -677,26 +696,30 @@ def _skin_light(th):
     o.append(_w("qh_search", 50, 34, 254, 50, 18, dim, "#ffffff"))
     o.append(_w("qh_status", 30, 86, 380, 22, 15, gold, bg, halign="center"))
     # the list card (reciters, then surahs in the same place)
-    o.append(_card_img(482, 110, 520, 528, 26, card, brd, 1, z=1))
+    o.append(_card_img(482, 110, 520, 528 + dy, 26, card, brd, 1, z=1))
     sel1 = ui_png(ui.card, p(492), rows[1], p(16), th["sel"], None, 1)
-    o.append(_list(NAMES[1], 496, 124, 492, 500, card, txt, sel1))
+    o.append(_list(NAMES[1], 496, 124, 492, 500 + dy, card, txt, sel1))
     sel2 = ui_png(ui.card, p(492), rows[2], p(16), th["sel"], None, 1)
-    o.append(_list(NAMES[2], 496, 124, 492, 500, card, txt, sel2))
+    o.append(_list(NAMES[2], 496, 124, 492, 500 + dy, card, txt, sel2))
     # the mushaf card
-    o.append(_img(ui_png(ui.card2, p(430), p(528), p(24), th["paper"], gold, th["paper_line"], p(12)), 30, 110, 430, 528, 1))
+    o.append(_img(ui_png(ui.card2, p(430), p(528 + dy), p(24), th["paper"], gold, th["paper_line"], p(12)), 30, 110, 430, 528 + dy, 1))
     o.append(_card_img(56, 136, 378, 66, 16, side, None, 1, z=2))
     o.append(_pixw("qh_card_title", 66, 140, 358, 58))
     for i in range(6):
         o.append(_pixw("qh_card_l%d" % i, 54, 212 + i * 62, 382, 60))
-    o.append(_w("qh_card_rec", 290, 590, 144, 30, 15, dim, th["paper"]))
+    o.append(_w("qh_card_rec", 290, 590 + dy, 144, 30, 15, dim, th["paper"]))
     o.append(u'<eLabel position="%d,%d" size="%d,%d" backgroundColor="%s" zPosition="2" />\n' % (
-        p(170), p(603), p(112), max(2, p(4)), th["track"]))
+        p(170), p(603 + dy), p(112), max(2, p(4)), th["track"]))
     o.append(u'<widget name="qh_np_fill" position="%d,%d" size="%d,%d" backgroundColor="%s" zPosition="3" />\n' % (
-        p(282), p(603), p(2), max(2, p(4)), side))
-    o.append(_w("qh_card_time", 54, 590, 112, 30, 14, dim, th["paper"], halign="left"))
+        p(282), p(603 + dy), p(2), max(2, p(4)), side))
+    o.append(_w("qh_card_time", 54, 590 + dy, 112, 30, 14, dim, th["paper"], halign="left"))
     # solid colour buttons
     solid = (("qh_red", "#b8433b"), ("qh_green", "#2e8a57"), ("qh_yellow", "#9b7a17"), ("qh_blue", "#3150b8"),
              ("qh_recbtn", "#7a2a2a"))
+    if dy:                                   # buttons hidden (INFO shows them again)
+        for name, _c in solid:
+            o.append(_hide(name))
+        solid = ()
     for i, (name, col) in enumerate(solid):
         x = 822 - i * 196
         o.append(_card_img(x, 652, 184, 46, 14, col, None, 1, z=1))
@@ -2496,8 +2519,10 @@ class Hub17Bg(object):
 
 
 
-BUILD = 31             # one number for both editions (the "what's new" screen and the changelog)
+BUILD = 32             # one number for both editions (the "what's new" screen and the changelog)
 CHANGELOG = [
+    (32, [u"زر INFO يخفي أزرار الألوان أسفل الشاشة ويظهرها، فتكبر اللوحات (أو من MENU)",
+          u"إصلاح خطأ ظهر في تقرير الأخطاء بعد إغلاق الشاشة أثناء رسم الآية"]),
     (31, [u"الشاشة لا تتوقف أثناء التلاوة: رسم الآيات صار في الخلفية، والآية التالية تُجهّز قبل أن تُتلى",
           u"تظليل الآية الجارية فقط عندما يكون توقيت التسجيل دقيقاً؛ وإلا يظهر رقمها بعلامة ≈ (تقريبي)",
           u"تزامن أدق: يُقبل توقيت التلاوة حتى مع فرق بسيط في طول الملف، ويُصحَّح بالنسبة"]),
@@ -8262,6 +8287,18 @@ def _reload_bouquets():
 
 
 
+def _alive(screen, name):
+    """Is this screen still open (a closed enigma2 screen has lost its widgets)?"""
+    try:
+        screen[name]
+        return True
+    except Exception:
+        return False
+
+
+_KEYS_MSG = []          # one message for the next main screen (buttons hidden / shown)
+
+
 class QuranHub(Screen):
     skin = u""
 
@@ -8325,6 +8362,10 @@ class QuranHub(Screen):
         self["qh_keys"] = ActionMap(
             ["InfobarInstantRecord", "InfobarMenuActions"],
             {"instantRecord": self.key_record, "mainMenu": self.key_menu}, -1)
+        # 3.0.2: INFO hides / shows the colour buttons at the bottom (both names: OpenATV / OpenPLi, BH)
+        self["qh_info"] = ActionMap(
+            ["InfobarEPGActions", "EPGSelectActions"],
+            {"showEventInfo": self.toggle_keys, "InfoPressed": self.toggle_keys, "info": self.toggle_keys}, -1)
         self["qh_seek"] = ActionMap(
             ["InfobarSeekActions", "MediaPlayerSeekActions"],
             {"seekBack": self.key_rewind, "seekFwd": self.key_forward,
@@ -8478,7 +8519,10 @@ class QuranHub(Screen):
         BG.prefetch()
         self.qh_idle, self._ci = make_timer(self.qh_labels)
         self.qh_idle.start(5000, False)
-        self.qh_status_text(BG.status or (u"MENU القائمة • ◀ ▶ التنقل بين اللوحات" if v3() else
+        msg = _KEYS_MSG.pop() if _KEYS_MSG else None
+        if msg is None and v3() and BG.cfg.get("hide_keys"):
+            msg = u"الأزرار مخفية • INFO لإظهارها"
+        self.qh_status_text(msg or BG.status or (u"MENU القائمة • ◀ ▶ التنقل بين اللوحات • INFO الأزرار" if v3() else
                             u"MENU القائمة الرئيسية • ◀◀ ▶▶ رجوع/تقديم • الاختصارات قابلة للتخصيص من القائمة"))
         self.qh_labels()
         self.load_section()
@@ -8496,7 +8540,29 @@ class QuranHub(Screen):
         elif a == "tv":
             self.key_tv()
 
+    _toggled = [0.0]
+
+    def toggle_keys(self):
+        """Hide / show the colour buttons at the bottom; the panels take the room (the screen is
+        built again on the same section)."""
+        now = time.time()
+        if now - self._toggled[0] < 0.6:         # INFO can arrive from two key maps
+            return
+        self._toggled[0] = now
+        if not v3():
+            return self.qh_status_text(u"إخفاء الأزرار متاح في المظاهر الجديدة فقط")
+        BG.cfg["hide_keys"] = not BG.cfg.get("hide_keys")
+        BG.save()
+        del _KEYS_MSG[:]
+        _KEYS_MSG.append(u"الأزرار مخفية • INFO لإظهارها" if BG.cfg["hide_keys"] else u"الأزرار ظاهرة • INFO لإخفائها")
+        self.close(("retheme", self.qh_sec))
+
     def qh_cleanup(self):
+        for k in ("np", "card"):
+            try:
+                painter().drop((k, id(self)))
+            except Exception:
+                pass
         try:
             self.qh_idle.stop()
             self.qh_np_timer.stop()
@@ -8657,7 +8723,7 @@ class QuranHub(Screen):
             fw = max(2, int(track * pct / 100.0)) if Player.active and ptxt != u"LIVE" else 2
             try:
                 self["qh_np_fill"].instance.resize(eSize(fw, max(2, p(4))))
-                self["qh_np_fill"].instance.move(ePoint((p(282) if light else p(864)) - fw, p(603) if light else p(637)))
+                self["qh_np_fill"].instance.move(ePoint((p(282) if light else p(864)) - fw, p(603 + v3_dy()) if light else p(637 + v3_dy())))
             except Exception:
                 pass
             if not light:
@@ -8703,13 +8769,15 @@ class QuranHub(Screen):
             qlog("np ayah: %r" % (e,))
 
     def _v3_ayah_show(self, spec):
+        if not _alive(self, "qh_np_ayah"):              # the screen was closed meanwhile
+            return
         h = spec[3]
         pix, iw = text_pixmap(*spec)
         if pix is None:
             return self["qh_np_ayah"].hide()
         self["qh_np_ayah"].instance.setPixmap(pix)
         self["qh_np_ayah"].instance.resize(eSize(iw, h))
-        self["qh_np_ayah"].instance.move(ePoint(p(84) + max(0, (p(780) - iw) // 2), p(576)))
+        self["qh_np_ayah"].instance.move(ePoint(p(84) + max(0, (p(780) - iw) // 2), p(576 + v3_dy())))
         self["qh_np_ayah"].show()
 
     def v3_card(self, cur):
@@ -8742,6 +8810,8 @@ class QuranHub(Screen):
             qlog("card: %r" % (e,))
 
     def _v3_card_show(self, out):
+        if not _alive(self, "qh_card_title"):
+            return
         self.qh_card_rng = (out["n"], out["first"], out["last"])
         spec = out["title"]
         pix, iw = text_pixmap(*spec)
@@ -9874,6 +9944,7 @@ class QuranHub(Screen):
              lambda: BG.toggle_flag("remote", True, u"التحكم بالريموت أثناء التصغير")),
             (u"تخصيص الاختصارات (الألوان والأرقام) ...", self.menu_colors),
             (u"اختيار المظهر (%d مظهراً) ..." % len(THEMES), self.theme_pick),
+            (u"أزرار الألوان أسفل الشاشة: %s  (INFO)" % (u"مخفية" if cfg.get("hide_keys") else u"ظاهرة"), self.toggle_keys),
             (u"المظهر التلقائي: %s ..." % self.AUTO_THEME_LABEL.get(cfg.get("auto_theme", "off")), self.auto_theme_menu),
             (u"شاشة البطاقات عند الفتح بدل المكتبة: %s" % self._on(cfg.get("home_screen", False)),
              lambda: BG.toggle_flag("home_screen", False, u"شاشة البطاقات عند الفتح")),
@@ -9957,7 +10028,8 @@ class QuranHub(Screen):
                ("player", u"المشغّل الكبير", "open_player"), ("speed", u"سرعة التلاوة", "speed_menu"),
                ("mark", u"حفظ علامة", "mark_here"), ("abrep", u"تكرار مقطع A-B", "ab_here"),
                ("diag", u"التشخيص الذاتي", "open_diag"),
-               ("help", u"عرض الاختصارات", "show_shortcuts")]
+               ("help", u"عرض الاختصارات", "show_shortcuts"),
+               ("keys", u"إخفاء / إظهار الأزرار", "toggle_keys")]
     KEY_DEFAULT = {"red": "minimise", "green": "play", "yellow": "search", "blue": "stop",
                    "0": "record", "1": "minimise", "2": "format", "3": "fav", "4": "prev",
                    "5": "hide", "6": "next", "7": "sleep", "8": "theme", "9": "tv"}
@@ -12108,6 +12180,8 @@ class QHPlayer(Screen):
         self["qp_tf_title"].setText(u"%s · %s %s%d" % (i18n.T(u"التفسير"), i18n.T(u"الآية"), u"" if exact else u"≈", a))
 
     def _verse_show(self, out):
+        if not _alive(self, "qp_ayah"):
+            return
         th = self.qp_th
         self.qp_drawn = out["key"]
         n, a, first = out["n"], out["a"], out["first"]
@@ -12149,6 +12223,8 @@ class QHPlayer(Screen):
         return row
 
     def wave_show(self, args):
+        if not _alive(self, "qp_wave"):
+            return
         pix = ui_pix(ui.waveform, *args)
         if pix is not None:
             self["qp_wave"].instance.setPixmap(pix)
@@ -12447,11 +12523,13 @@ class QHSimple(Screen):
         Runner().run(lambda: subs_for(entry), go, go)
 
 
-def open_hub(session):
+def open_hub(session, sec=None):
     def again(result=None):
         if result == "retheme":
             open_hub(session)
-    session.openWithCallback(again, QuranHub)
+        elif isinstance(result, tuple) and result and result[0] == "retheme":
+            open_hub(session, result[1])          # same section (INFO: buttons hidden / shown)
+    session.openWithCallback(again, QuranHub, sec)
 
 
 def open_start(session):
