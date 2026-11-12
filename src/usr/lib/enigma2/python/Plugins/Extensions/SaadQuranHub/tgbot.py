@@ -173,8 +173,12 @@ class TgBot(object):
         p = {"chat_id": chat, "text": text[:4000], "disable_web_page_preview": "true"}
         if kb is not None:
             p["reply_markup"] = {"inline_keyboard": kb}
+        elif reply_kb == "remove":             # 3.0.3: the buttons go away until /keys
+            p["reply_markup"] = {"remove_keyboard": True}
         elif reply_kb is not None:
-            p["reply_markup"] = {"keyboard": reply_kb, "resize_keyboard": True, "is_persistent": True}
+            # not persistent: the keyboard icon in the message field hides / shows the buttons
+            p["reply_markup"] = {"keyboard": reply_kb, "resize_keyboard": True, "is_persistent": False,
+                                 "input_field_placeholder": u"اكتب اسم قارئ..."}
         return self._bg(lambda: self.call("sendMessage", p), done)
 
     def edit(self, chat, msg_id, text, kb=None):
@@ -235,13 +239,15 @@ COMMANDS = [
     {"command": "stars", "description": u"نجوم الأسرة"},
     {"command": "harvest", "description": u"حصاد الشهر"},
     {"command": "stop", "description": u"إيقاف التشغيل"},
+    {"command": "keys", "description": u"إظهار الأزرار"},
+    {"command": "hide", "description": u"إخفاء الأزرار"},
     {"command": "help", "description": u"المساعدة"},
 ]
 
 MAIN_KB = [[{"text": u"▶️ التشغيل الآن"}, {"text": u"🔎 بحث عن قارئ"}],
            [{"text": u"📻 الإذاعات"}, {"text": u"📚 مكتبتي"}],
            [{"text": u"⬇️ التنزيلات"}, {"text": u"📖 آية اليوم"}],
-           [{"text": u"🔖 علاماتي"}]]
+           [{"text": u"🔖 علاماتي"}, {"text": u"⌨️ إخفاء الأزرار"}]]
 
 CONTROL_KB = [[{"text": u"⏮", "callback_data": "c:pv"}, {"text": u"⏯", "callback_data": "c:pp"},
                {"text": u"⏭", "callback_data": "c:nx"}],

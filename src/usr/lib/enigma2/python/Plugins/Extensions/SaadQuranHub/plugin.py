@@ -86,7 +86,7 @@ from . import packs
 from . import house
 from . import ui
 
-PLUGIN_VERSION = "2.0.2"
+PLUGIN_VERSION = "2.0.3"
 GITHUB_REPO = "Saadmelshepiny/SaadQuranHub"
 GITHUB_INFO = "https://raw.githubusercontent.com/%s/main/version.json" % GITHUB_REPO
 
@@ -1928,7 +1928,7 @@ class Hub16Bg(object):
             u"• /now التشغيل الآن وأزرار التحكم\n• /radio الإذاعات\n• /lib مكتبتي (تشغيل أو إرسال الملفات)\n"
             u"• /dl حالة التنزيلات\n• /ayah آية اليوم\n• /marks علاماتي\n• /speed سرعة التلاوة\n• /stop إيقاف\n"
             u"• /wird ورد الحفظ الآن\n• /backup نسخة احتياطية (أرسل الملف لاحقاً للاستعادة)\n• /station رابط إذاعتي الخاصة\n"
-            u"• /stars نجوم الأسرة\n• /harvest حصاد الشهر")
+            u"• /stars نجوم الأسرة\n• /harvest حصاد الشهر\n• /hide إخفاء الأزرار • /keys إظهارها")
 
     def tg_handle(self, u):
         if "callback_query" in u:
@@ -1948,6 +1948,11 @@ class Hub16Bg(object):
         b = self.bot
         if cmd in (u"/start", u"/help"):
             b.send(chat, self.HELP, reply_kb=tgbot.MAIN_KB)
+        elif cmd == u"/hide" or text == u"⌨️ إخفاء الأزرار":
+            b.send(chat, u"⌨️ أُخفيت الأزرار. اكتب /keys لإظهارها مرة أخرى.", reply_kb="remove")
+        elif cmd in (u"/keys", u"/menu"):
+            b.send(chat, u"⌨️ الأزرار ظاهرة. أيقونة الكيبورد بجانب خانة الكتابة تخفيها مؤقتاً، و«⌨️ إخفاء الأزرار» تخفيها تماماً.",
+                   reply_kb=tgbot.MAIN_KB)
         elif cmd == u"/now" or text == u"▶️ التشغيل الآن":
             self.tg_now(chat)
         elif cmd == u"/stop":
@@ -2519,8 +2524,9 @@ class Hub17Bg(object):
 
 
 
-BUILD = 32             # one number for both editions (the "what's new" screen and the changelog)
+BUILD = 33             # one number for both editions (the "what's new" screen and the changelog)
 CHANGELOG = [
+    (33, [u"تليجرام: أزرار البوت يمكن إخفاؤها (زر «⌨️ إخفاء الأزرار» أو /hide) وإظهارها بـ /keys"]),
     (32, [u"زر INFO يخفي أزرار الألوان أسفل الشاشة ويظهرها، فتكبر اللوحات (أو من MENU)",
           u"إصلاح خطأ ظهر في تقرير الأخطاء بعد إغلاق الشاشة أثناء رسم الآية"]),
     (31, [u"الشاشة لا تتوقف أثناء التلاوة: رسم الآيات صار في الخلفية، والآية التالية تُجهّز قبل أن تُتلى",
