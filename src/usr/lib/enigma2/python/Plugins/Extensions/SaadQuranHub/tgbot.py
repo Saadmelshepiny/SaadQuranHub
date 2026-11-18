@@ -130,7 +130,7 @@ class TgBot(object):
         while self.running:
             try:
                 ups = self.call("getUpdates", {"timeout": 25, "offset": self.offset,
-                                               "allowed_updates": ["message", "callback_query"]}, timeout=40)
+                                               "allowed_updates": ["message", "callback_query", "poll_answer"]}, timeout=40)
                 self.error = None
                 self.ok_at = time.time()
                 wait = 3
@@ -180,6 +180,14 @@ class TgBot(object):
             p["reply_markup"] = {"keyboard": reply_kb, "resize_keyboard": True, "is_persistent": False,
                                  "input_field_placeholder": u"اكتب اسم قارئ..."}
         return self._bg(lambda: self.call("sendMessage", p), done)
+
+    def send_quiz(self, chat, question, options, correct, explanation=u"", done=None):
+        """3.1: a Telegram quiz poll - whoever answers sees at once if he was right (and why)."""
+        p = {"chat_id": chat, "question": question[:300], "options": [o[:100] for o in options],
+             "type": "quiz", "correct_option_id": int(correct), "is_anonymous": False}
+        if explanation:
+            p["explanation"] = explanation[:200]
+        return self._bg(lambda: self.call("sendPoll", p), done)
 
     def edit(self, chat, msg_id, text, kb=None):
         p = {"chat_id": chat, "message_id": msg_id, "text": text[:4000], "disable_web_page_preview": "true"}
@@ -239,6 +247,9 @@ COMMANDS = [
     {"command": "stars", "description": u"نجوم الأسرة"},
     {"command": "harvest", "description": u"حصاد الشهر"},
     {"command": "stop", "description": u"إيقاف التشغيل"},
+    {"command": "quiz", "description": u"🧠 سؤال في مسابقة القرآن"},
+    {"command": "top", "description": u"🏆 ترتيب المسابقة"},
+    {"command": "khatma", "description": u"📗 الختمة الجماعية"},
     {"command": "keys", "description": u"إظهار الأزرار"},
     {"command": "hide", "description": u"إخفاء الأزرار"},
     {"command": "help", "description": u"المساعدة"},
@@ -247,6 +258,7 @@ COMMANDS = [
 MAIN_KB = [[{"text": u"▶️ التشغيل الآن"}, {"text": u"🔎 بحث عن قارئ"}],
            [{"text": u"📻 الإذاعات"}, {"text": u"📚 مكتبتي"}],
            [{"text": u"⬇️ التنزيلات"}, {"text": u"📖 آية اليوم"}],
+           [{"text": u"🧠 مسابقة"}, {"text": u"📗 الختمة الجماعية"}],
            [{"text": u"🔖 علاماتي"}, {"text": u"⌨️ إخفاء الأزرار"}]]
 
 CONTROL_KB = [[{"text": u"⏮", "callback_data": "c:pv"}, {"text": u"⏯", "callback_data": "c:pp"},

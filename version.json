@@ -1,8 +1,8 @@
 {
-  "version": "2.0.3",
-  "ipk": "https://raw.githubusercontent.com/Saadmelshepiny/SaadQuranHub/main/ipk/enigma2-plugin-extensions-saadquranhub_2.0.3_all.ipk",
-  "sha256": "ac2071a61101c3b0626deba1bab0de15b382dc0aa7e85a65f3ec19674a2e30d8",
-  "ipk_lite": "https://raw.githubusercontent.com/Saadmelshepiny/SaadQuranHub/main/ipk/enigma2-plugin-extensions-saadquranhub-lite_2.0.3_all.ipk",
-  "sha256_lite": "86ad3bf503f1a92585cbbf1ab3c431055af2858decbbbd6c63e07c7de561461c",
-  "notes": "تليجرام: إخفاء أزرار البوت (/hide) وإظهارها (/keys)"
+  "version": "2.1",
+  "ipk": "https://raw.githubusercontent.com/Saadmelshepiny/SaadQuranHub/main/ipk/enigma2-plugin-extensions-saadquranhub_2.1_all.ipk",
+  "sha256": "c7e48455105a8504debdf1b17f28b048eeb64a93f72074c8474c4d7d8c0b0660",
+  "ipk_lite": "https://raw.githubusercontent.com/Saadmelshepiny/SaadQuranHub/main/ipk/enigma2-plugin-extensions-saadquranhub-lite_2.1_all.ipk",
+  "sha256_lite": "c83bbe8c3c00d30c9df368b7c1bd3891ad008b583bf118710b51d33d43954c5e",
+  "notes": "مسابقة القرآن (التلفزيون وتليجرام) • الختمة الجماعية • البوت في مجموعة الأسرة • تزامن دقيق لكل تلاوة • الصندوق الأسود • صحة الجهاز"
 }

@@ -81,12 +81,14 @@ from . import localserve
 from . import i18n
 from . import hddcache
 from . import dlna
+from . import syncpro
+from . import quiz
 from . import safeupdate
 from . import packs
 from . import house
 from . import ui
 
-PLUGIN_VERSION = "2.0.3"
+PLUGIN_VERSION = "2.1"
 GITHUB_REPO = "Saadmelshepiny/SaadQuranHub"
 GITHUB_INFO = "https://raw.githubusercontent.com/%s/main/version.json" % GITHUB_REPO
 
@@ -1928,14 +1930,21 @@ class Hub16Bg(object):
             u"• /now التشغيل الآن وأزرار التحكم\n• /radio الإذاعات\n• /lib مكتبتي (تشغيل أو إرسال الملفات)\n"
             u"• /dl حالة التنزيلات\n• /ayah آية اليوم\n• /marks علاماتي\n• /speed سرعة التلاوة\n• /stop إيقاف\n"
             u"• /wird ورد الحفظ الآن\n• /backup نسخة احتياطية (أرسل الملف لاحقاً للاستعادة)\n• /station رابط إذاعتي الخاصة\n"
+            u"• /quiz سؤال في مسابقة القرآن (/quiz 3 للمستوى الصعب) • /top الترتيب\n"
+            u"• /khatma الختمة الجماعية (احجز جزءاً ثم علّمه بعد قراءته)\n"
+            u"• لإضافة البوت لمجموعة الأسرة: أضفه للمجموعة ثم اكتب فيها /link\n"
             u"• /stars نجوم الأسرة\n• /harvest حصاد الشهر\n• /hide إخفاء الأزرار • /keys إظهارها")
 
     def tg_handle(self, u):
         if "callback_query" in u:
             return self.tg_callback(u["callback_query"])
+        if "poll_answer" in u:
+            return self.tg_poll_answer(u["poll_answer"])
         m = u.get("message") or {}
         chat = (m.get("chat") or {}).get("id")
         text = (m.get("text") or u"").strip()
+        if chat and (m.get("chat") or {}).get("type") in ("group", "supergroup"):
+            return self.tg_group(chat, text, m)
         if chat and m.get("document") and self.tg_is_owner(chat):
             return self.tg_restore_file(chat, m["document"])
         if not chat or not text:
@@ -1948,6 +1957,12 @@ class Hub16Bg(object):
         b = self.bot
         if cmd in (u"/start", u"/help"):
             b.send(chat, self.HELP, reply_kb=tgbot.MAIN_KB)
+        elif cmd == u"/quiz" or text == u"🧠 مسابقة":
+            self.tg_quiz(chat, arg)
+        elif cmd == u"/top":
+            b.send(chat, quiz.board_text(self.cfg))
+        elif cmd == u"/khatma" or text == u"📗 الختمة الجماعية":
+            self.tg_khatma(chat)
         elif cmd == u"/hide" or text == u"⌨️ إخفاء الأزرار":
             b.send(chat, u"⌨️ أُخفيت الأزرار. اكتب /keys لإظهارها مرة أخرى.", reply_kb="remove")
         elif cmd in (u"/keys", u"/menu"):
@@ -2121,6 +2136,8 @@ class Hub16Bg(object):
         msg_id = (cq.get("message") or {}).get("message_id")
         d = cq.get("data") or u""
         b = self.bot
+        if d.startswith("K:") and chat and (self.tg_is_owner(chat) or self.tg_group_linked(chat)):
+            return self.tg_khatma_cb(cq, chat, msg_id, d)
         if not chat or not self.tg_is_owner(chat):
             return b.answer(cq.get("id"), u"غير مصرح")
         b.answer(cq.get("id"))
@@ -2387,6 +2404,9 @@ class Hub17Bg(object):
                 if aa == a:
                     return t0 / 1000.0, t1 / 1000.0
             return None
+        own = self.own_timing(n)
+        if own:
+            return syncpro.bounds(own, a, syncpro.offset_for(self.cfg, self.sync_reciter()))
         tl, _m = self.timing_for(n)
         if tl and self.sync_exact:
             k = self.sync_scale or 1.0
@@ -2524,8 +2544,14 @@ class Hub17Bg(object):
 
 
 
-BUILD = 33             # one number for both editions (the "what's new" screen and the changelog)
+BUILD = 34             # one number for both editions (the "what's new" screen and the changelog)
 CHANGELOG = [
+    (34, [u"🧠 مسابقة القرآن: أسئلة تُصنع من نص المصحف (من أي سورة، أكمل الآية، الآية التالية، الجزء، عدد الآيات، مكية/مدنية، ترتيب السور) بثلاثة مستويات - على التلفزيون بأزرار الألوان، وفي تليجرام كاختبار تظهر فيه الإجابة الصحيحة فور الاختيار، مع ترتيب أسبوعي وسؤال يومي",
+          u"👪 البوت في مجموعة الأسرة: أضفه للمجموعة واكتب /link، فيلعب الجميع المسابقة ويشاركون في الختمة",
+          u"📗 الختمة الجماعية في تليجرام: كل فرد يحجز أجزاءه ويعلّمها بعد قراءتها، والبوت يتابع التقدم",
+          u"🎯 تزامن دقيق لكل تلاوة: الجهاز يستمع للتلاوة في الخلفية ويعرف مواضع الوقف بين الآيات (ffmpeg)، أو مزامنة يدوية بضغطة OK عند بداية كل آية، وتقديم/تأخير التظليل لكل قارئ",
+          u"🛑 الصندوق الأسود: إذا انهارت واجهة الجهاز يصلك سبب الانهيار على تليجرام",
+          u"🧹 حارس الذاكرة، و🩺 شاشة صحة الجهاز (الذاكرة، المساحة، سرعة السيرفرات)"]),
     (33, [u"تليجرام: أزرار البوت يمكن إخفاؤها (زر «⌨️ إخفاء الأزرار» أو /hide) وإظهارها بـ /keys"]),
     (32, [u"زر INFO يخفي أزرار الألوان أسفل الشاشة ويظهرها، فتكبر اللوحات (أو من MENU)",
           u"إصلاح خطأ ظهر في تقرير الأخطاء بعد إغلاق الشاشة أثناء رسم الآية"]),
@@ -3511,7 +3537,338 @@ class Hub21Bg(object):
         return [k for k, v in sorted(u.items(), key=lambda kv: -kv[1]) if v >= 3][:n]
 
 
-class Background(Hub16Bg, Hub17Bg, Hub18Bg, Hub19Bg, Hub21Bg):
+def _tg_name(user):
+    user = user or {}
+    n = (user.get("first_name") or u"").strip()
+    if user.get("last_name"):
+        n += u" " + user["last_name"].strip()[:1]
+    return n or (u"@" + user["username"] if user.get("username") else u"مشترك %s" % str(user.get("id", u""))[-4:])
+
+
+AR_NUM = u"٠١٢٣٤٥٦٧٨٩"
+
+
+def _arn(n):
+    return u"".join(AR_NUM[int(c)] for c in u"%d" % n)
+
+
+class Hub31Bg(object):
+    """3.1: the quiz on Telegram (quiz polls, scores, groups), the family khatma, the black box
+    (crash reports to Telegram) and the memory guard."""
+    _t31 = None
+
+    # -- groups -----------------------------------------------------------------------------
+    def tg_groups(self):
+        return self.cfg.get("tg_groups") or []
+
+    def tg_group_linked(self, chat):
+        return any(int(g.get("id", 0)) == int(chat) for g in self.tg_groups())
+
+    def tg_group(self, chat, text, m):
+        """A message in a Telegram group: /link by an owner adds the group; in a linked group anyone
+        can play the quiz, see the ranking and take part in the khatma (nothing else)."""
+        if not text.startswith(u"/"):
+            return
+        parts = text.split(None, 1)
+        cmd = parts[0].split("@")[0].lower()
+        arg = parts[1].strip() if len(parts) > 1 else u""
+        frm = (m.get("from") or {}).get("id")
+        b = self.bot
+        owner = frm is not None and self.tg_is_owner(frm)
+        title = (m.get("chat") or {}).get("title") or u"المجموعة"
+        if cmd == u"/link":
+            if not owner:
+                return b.send(chat, u"🔐 فقط صاحب الريسيفر يستطيع ربط هذه المجموعة (اكتب /start للبوت في الخاص أولاً).")
+            gs = [g for g in self.tg_groups() if int(g.get("id", 0)) != int(chat)]
+            gs.append({"id": int(chat), "title": title})
+            self.cfg["tg_groups"] = gs[-10:]
+            self.save()
+            return b.send(chat, u"✅ رُبطت «%s».\n🧠 /quiz سؤال  •  🏆 /top الترتيب  •  📗 /khatma الختمة الجماعية\n"
+                                u"وسيصل سؤال يومي في %s." % (title, self.cfg.get("quiz_time") or u"21:00"))
+        if cmd == u"/unlink" and owner:
+            self.cfg["tg_groups"] = [g for g in self.tg_groups() if int(g.get("id", 0)) != int(chat)]
+            self.save()
+            return b.send(chat, u"أُلغي ربط المجموعة")
+        if not self.tg_group_linked(chat):
+            return
+        if cmd == u"/quiz":
+            self.tg_quiz(chat, arg)
+        elif cmd == u"/top":
+            b.send(chat, quiz.board_text(self.cfg))
+        elif cmd == u"/khatma":
+            self.tg_khatma(chat)
+        elif cmd == u"/ayah":
+            b.send(chat, self.tg_ayah_text())
+        elif cmd in (u"/help", u"/start"):
+            b.send(chat, u"📖 Saad Quran Hub في المجموعة\n🧠 /quiz سؤال (/quiz 1 سهل، 2 متوسط، 3 صعب)\n"
+                         u"🏆 /top الترتيب\n📗 /khatma الختمة الجماعية\n📖 /ayah آية اليوم")
+
+    # -- the quiz ----------------------------------------------------------------------------
+    def tg_quiz(self, chat, arg=u""):
+        if self.bot is None:
+            return
+        try:
+            level = int(arg) if arg.strip() in ("1", "2", "3") else int(self.cfg.get("quiz_level", 1))
+        except Exception:
+            level = 1
+        q = quiz.make(level, avoid=self.cfg.get("quiz_recent"))
+        if not q:
+            return self.bot.send(chat, u"نص المصحف غير موجود على الجهاز")
+        rec = self.cfg.setdefault("quiz_recent", [])
+        rec.append(q["q"] + q.get("ayah", u""))
+        del rec[:-60]
+        text, opts, why = quiz.for_poll(q)
+
+        def sent(res, err):
+            if err or not res:
+                return qlog("quiz poll: %r" % (err,))
+            pid = ((res or {}).get("poll") or {}).get("id")
+            if pid:
+                with self._q31_lock():
+                    polls = self.cfg.setdefault("quiz_polls", {})
+                    polls[pid] = [int(q["ok"]), int(level), int(time.time())]
+                    for k in sorted(polls, key=lambda k: polls[k][2])[:-150]:
+                        polls.pop(k, None)
+        self.bot.send_quiz(chat, text, opts, q["ok"], why, sent)
+
+    _q31 = []
+
+    def _q31_lock(self):
+        if not self._q31:
+            self._q31.append(threading.Lock())
+        return self._q31[0]
+
+    def tg_poll_answer(self, pa):
+        pid = pa.get("poll_id")
+        with self._q31_lock():
+            p_ = (self.cfg.get("quiz_polls") or {}).get(pid)
+        if not p_ or not pa.get("option_ids"):
+            return
+        right = int(pa["option_ids"][0]) == int(p_[0])
+        quiz.score(self.cfg, _tg_name(pa.get("user")), right, int(p_[1]))
+        self.save()
+
+    def quiz_daily(self):
+        if self.bot is None:
+            return
+        targets = [g["id"] for g in self.tg_groups()]
+        if self.cfg.get("quiz_owners", True):
+            targets += [o["id"] for o in self.tg_owners()]
+        for c in targets:
+            self.tg_quiz(c)
+        k = self.cfg.get("khatma_g")
+        if k and not self.khatma_done(k):
+            for g in self.tg_groups():
+                self.bot.send(g["id"], self.khatma_text(k))
+        if time.localtime().tm_wday == 4:                 # Friday: the ranking of the week
+            for g in self.tg_groups():
+                self.bot.send(g["id"], quiz.board_text(self.cfg))
+
+    # -- the family khatma -------------------------------------------------------------------
+    def khatma_new(self):
+        k = {"no": int((self.cfg.get("khatma_g") or {}).get("no", 0)) + 1, "start": int(time.time()), "juz": {}}
+        self.cfg["khatma_g"] = k
+        self.save()
+        return k
+
+    @staticmethod
+    def khatma_done(k):
+        return len([1 for v in (k.get("juz") or {}).values() if v[2]]) >= 30
+
+    def khatma_text(self, k):
+        js = k.get("juz") or {}
+        done = len([1 for v in js.values() if v[2]])
+        taken = len(js)
+        bar = u"🟩" * (done * 10 // 30) + u"⬜" * (10 - done * 10 // 30)
+        lines = [u"📗 الختمة الجماعية رقم %s" % _arn(k.get("no", 1)),
+                 u"%s  تمت قراءة %s من ٣٠ جزءاً • محجوز %s" % (bar, _arn(done), _arn(taken)), u""]
+        by = {}
+        for j, v in js.items():
+            by.setdefault(v[0], []).append((int(j), v[2]))
+        for name, lst in sorted(by.items()):
+            lst.sort()
+            lines.append(u"• %s: %s" % (name, u"، ".join(u"%s%s" % (_arn(j), u"✅" if d else u"") for j, d in lst)))
+        if self.khatma_done(k):
+            lines.append(u"")
+            lines.append(u"🎉 تمت الختمة بحمد الله. اللهم تقبّل")
+        else:
+            lines.append(u"")
+            lines.append(u"اضغط رقم جزء لحجزه، واضغطه مرة ثانية بعد قراءته ✅")
+        return u"\n".join(lines)
+
+    def khatma_kb(self, k):
+        js = k.get("juz") or {}
+        rows, row = [], []
+        for j in range(1, 31):
+            v = js.get(str(j))
+            lab = _arn(j) + (u"✅" if v and v[2] else (u"👤" if v else u""))
+            row.append({"text": lab, "callback_data": "K:%d" % j})
+            if len(row) == 6:
+                rows.append(row)
+                row = []
+        rows.append([{"text": u"🔄 تحديث", "callback_data": "K:0"}] +
+                    ([{"text": u"📗 ختمة جديدة", "callback_data": "K:new"}] if self.khatma_done(k) else []))
+        return rows
+
+    def tg_khatma(self, chat):
+        k = self.cfg.get("khatma_g") or self.khatma_new()
+        self.bot.send(chat, self.khatma_text(k), self.khatma_kb(k))
+
+    def tg_khatma_cb(self, cq, chat, msg_id, d):
+        b = self.bot
+        user = cq.get("from") or {}
+        name, uid = _tg_name(user), int(user.get("id", 0))
+        k = self.cfg.get("khatma_g") or self.khatma_new()
+        what = d.split(":", 1)[1]
+        note = u""
+        if what == "new":
+            if self.khatma_done(k):
+                k = self.khatma_new()
+                note = u"بدأت ختمة جديدة"
+        elif what != "0":
+            j = str(int(what))
+            js = k.setdefault("juz", {})
+            v = js.get(j)
+            if v is None:
+                js[j] = [name, uid, False]
+                note = u"حُجز لك الجزء %s" % _arn(int(j))
+            elif int(v[1]) != uid:
+                note = u"الجزء %s محجوز لـ %s" % (_arn(int(j)), v[0])
+            elif not v[2]:
+                v[2] = True
+                note = u"تقبّل الله ✅ الجزء %s" % _arn(int(j))
+                if self.khatma_done(k):
+                    note = u"🎉 تمت الختمة"
+                    studio.star_add(self.cfg, u"تمام الختمة الجماعية رقم %d" % k.get("no", 1))
+            else:
+                js.pop(j)
+                note = u"أُلغي حجز الجزء %s" % _arn(int(j))
+            self.save()
+        b.answer(cq.get("id"), note)
+        if msg_id:
+            b.edit(chat, msg_id, self.khatma_text(k), self.khatma_kb(k))
+
+    # -- every minute -----------------------------------------------------------------------
+    def tick31(self, now):
+        if self._t31 is None:
+            self._t31 = {"crash": 0, "mem": 0, "low": False}
+        t = self._t31
+        if now - self.boot > 90 and now - t["crash"] > 1800:
+            t["crash"] = now
+            self.crash_check()
+        if now - t["mem"] > 60:
+            t["mem"] = now
+            self.mem_guard()
+        lt = time.localtime(now)
+        hm = "%02d:%02d" % (lt.tm_hour, lt.tm_min)
+        today = time.strftime("%Y-%m-%d", lt)
+        fired = self.cfg.setdefault("fired31", {})
+        qt = self.cfg.get("quiz_time", "21:00")
+        if qt and qt == hm and fired.get("quiz") != today:
+            fired["quiz"] = today
+            self.save()
+            self.quiz_daily()
+
+    # -- the black box -----------------------------------------------------------------------
+    CRASH_DIRS = ("/home/root/logs", "/home/root", "/media/hdd", "/media/hdd/logs", "/media/usb",
+                  "/media/usb/logs", "/media/mmc", "/tmp")
+
+    def crash_check(self):
+        """A new enigma2 crash log since the last look: send its end to Telegram (and keep it in
+        the error log), so the reason of a black screen / restart is never lost."""
+        def work():
+            seen = float(self.cfg.get("crash_seen", 0) or 0)
+            found = []
+            for d in self.CRASH_DIRS:
+                try:
+                    for f in os.listdir(d):
+                        if f.startswith("enigma2_crash") and f.endswith(".log"):
+                            p_ = os.path.join(d, f)
+                            mt = os.path.getmtime(p_)
+                            if mt > seen:
+                                found.append((mt, p_))
+                except Exception:
+                    pass
+            found.sort()
+            out = []
+            for mt, p_ in found[-3:]:
+                try:
+                    with open(p_, "rb") as fh:
+                        fh.seek(0, 2)
+                        sz = fh.tell()
+                        fh.seek(max(0, sz - 6000))
+                        tail = fh.read().decode("utf-8", "ignore")
+                    lines = [l for l in tail.splitlines() if l.strip()]
+                    key = [l for l in lines if "SaadQuranHub" in l or "Traceback" in l or "Error" in l]
+                    out.append((mt, p_, u"\n".join((key[-12:] if key else lines[-12:]))))
+                except Exception:
+                    pass
+            return (found[-1][0] if found else seen), out
+
+        def done(res):
+            mt, out = res
+            if first_time and not self.cfg.get("crash_seen"):
+                self.cfg["crash_seen"] = time.time()      # older crashes are not news
+                self.save()
+                return
+            if mt > float(self.cfg.get("crash_seen", 0) or 0):
+                self.cfg["crash_seen"] = mt
+                if out:
+                    self.cfg["crash_any"] = True
+                self.save()
+            for mt_, p_, txt in out:
+                qlog(u"CRASH %s: %s" % (p_, txt.replace(u"\n", u" | ")[:600]))
+                ours = u"SaadQuranHub" in txt
+                self.tg_notify(u"🛑 انهارت واجهة الجهاز %s\n%s%s\n\n%s" % (
+                    time.strftime("%m-%d %H:%M", time.localtime(mt_)),
+                    u"(السبب من البلاجين)\n" if ours else u"", p_, txt[-1500:]))
+        first_time = not self.cfg.get("crash_seen")
+        try:
+            self.runner.run(work, done, lambda e: qlog("crash check: %r" % (e,)))
+        except Exception as e:
+            qlog("crash check: %r" % (e,))
+
+    # -- the memory guard --------------------------------------------------------------------
+    @staticmethod
+    def mem_free_mb():
+        try:
+            with open("/proc/meminfo") as f:
+                info = dict((l.split(":")[0], int(l.split()[1])) for l in f if ":" in l)
+            return (info.get("MemAvailable") or info.get("MemFree", 0) + info.get("Cached", 0)) // 1024
+        except Exception:
+            return None
+
+    def mem_guard(self, force=False):
+        """Little memory left: drop what the plugin can draw again (pictures of text and of the
+        look in /tmp, decoded pictures in RAM) before the receiver gets slow."""
+        free = self.mem_free_mb()
+        t = self._t31 or {}
+        if free is None or (free > int(self.cfg.get("mem_low_mb", 40)) and not force):
+            t["low"] = False
+            return free
+        freed = 0
+        try:
+            _UIPIX.clear()
+            _PIXC.clear()
+            qtext._trim_cache(150)
+            for d in ("/tmp/sqh_ui",):
+                for f in os.listdir(d) if os.path.isdir(d) else []:
+                    try:
+                        freed += os.path.getsize(os.path.join(d, f))
+                        os.remove(os.path.join(d, f))
+                    except Exception:
+                        pass
+        except Exception as e:
+            qlog("mem guard: %r" % (e,))
+        qlog("mem guard: %s MB free, cleaned %d KB" % (free, freed // 1024))
+        if not t.get("low"):
+            t["low"] = True
+            if not force:
+                self.tg_notify(u"⚠️ ذاكرة الجهاز منخفضة (%s ميجا) - نظّف البلاجين الصور المؤقتة" % free)
+        return free
+
+
+class Background(Hub16Bg, Hub17Bg, Hub18Bg, Hub19Bg, Hub21Bg, Hub31Bg):
     """Everything that must survive closing/minimising the screen."""
 
     def __init__(self):
@@ -5716,10 +6073,64 @@ class Background(Hub16Bg, Hub17Bg, Hub18Bg, Hub19Bg, Hub21Bg):
             elif matched:
                 return None
             self.sync_exact = True
+            ms += syncpro.offset_for(self.cfg, self.sync_reciter()) * 1000.0
             return data.ayah_from_timing(tl, ms)
         except Exception as e:
             qlog("timing: %s" % e)
             return None
+
+    # -- 3.1: our own ayah timing (syncpro) -------------------------------------------------
+    def sync_src(self):
+        """(key url, source to listen to) of the file being played."""
+        url = self.real_url(self.cur_url) or self.cur_url or u""
+        p = localserve.path_of(url)
+        src = p if p and os.path.exists(p) else url
+        return url, src
+
+    def sync_reciter(self):
+        return QHNow.split_title(Player.cur_title or u"")[0] or u""
+
+    def own_timing(self, n):
+        try:
+            if not Player.active or self.cur_live:
+                return None
+            item = self.cur_item()
+            if item.get("tempo") or item.get("qdc"):
+                return None
+            url, _src = self.sync_src()
+            v = syncpro.get(url)
+            pp = self.play_pos()
+            if syncpro.usable(v, n, pp[1] if pp else 0):
+                return v
+        except Exception as e:
+            qlog("own timing: %r" % (e,))
+        return None
+
+    def own_ayah(self, n):
+        v = self.own_timing(n)
+        if not v:
+            return None
+        pp = self.play_pos()
+        if not pp:
+            return None
+        self.sync_own = v.get("src")
+        return syncpro.ayah_at(v, pp[0], syncpro.offset_for(self.cfg, self.sync_reciter()))
+
+    sync_own = None
+
+    def auto_sync(self, n):
+        """No exact timing for this recording: let the receiver listen to it in the background."""
+        if not self.cfg.get("auto_sync", True) or self.cur_live:
+            return
+        try:
+            pp = self.play_pos()
+            if not pp or pp[1] <= 30:
+                return
+            url, src = self.sync_src()
+            if syncpro.AUTO.want(url, src, n, pp[1]):
+                qlog("auto sync: listening to %s" % url)
+        except Exception as e:
+            qlog("auto sync: %r" % (e,))
 
     def verse_exact(self):
         """Was the last verse_now() exact (ayah items, quran.com word timing, official timing)?
@@ -5761,9 +6172,14 @@ class Background(Hub16Bg, Hub17Bg, Hub18Bg, Hub19Bg, Hub21Bg):
         n = extras.surah_of_title(Player.cur_title)
         if not n:
             return None
+        own = self.own_ayah(n)                    # 3.1: tapped by the listener / found by the receiver
+        if own:
+            self.sync_exact = True
+            return n, own
         ex = self.exact_ayah(n)
         if ex:
             return n, ex
+        self.auto_sync(n)
         pct, txt = self.progress()
         if not txt or txt == u"LIVE":
             return None
@@ -5908,6 +6324,10 @@ class Background(Hub16Bg, Hub17Bg, Hub18Bg, Hub19Bg, Hub21Bg):
         popup(u"الصلاة خير من النوم - أذان الفجر", 8)
 
     def season_tick(self, now):
+        try:
+            self.tick31(now)
+        except Exception as e:
+            qlog("tick31: %r" % (e,))
         lt = time.localtime(now)
         hm = "%02d:%02d" % (lt.tm_hour, lt.tm_min)
         today = time.strftime("%Y-%m-%d", lt)
@@ -7470,6 +7890,265 @@ class QHMushaf(QHPaged):
                              open_share(self.session, *self.cur_ref()) if c[1] == "share" else
                              self.pick_page() if c[1] == "page" else
                              self.session.open(QHReader, (next((r for r in self.qm_refs if r), (1, 1)))[0], "tafsir")))
+
+
+class QHContest(Screen):
+    """3.1: the Quran quiz on the TV.  Four answers on the colour buttons (or 1-4); the right answer
+    lights up at once with a short explanation; points go to the player chosen (family profiles),
+    and the quiz also feeds the family stars every 5 right answers."""
+    COLS = ("#c0453c", "#2e9a5c", "#b8921f", "#3a5bc4")
+    KEYS = (u"أحمر", u"أخضر", u"أصفر", u"أزرق")
+
+    def __init__(self, session):
+        BG.attach(session)
+        th = THEMES[BG.theme_idx()]
+        light = th.get("layout") == 9
+        bg = th["bg"]
+        pan = th.get("panel", bg)
+        txt = th.get("text", "#ffffff")
+        dim = th.get("dim", "#8a96a0")
+        gold = th["gold"] if isinstance(th["gold"], str) else _hex(th["gold"])
+        self.qz_th = th
+        o = [u'<screen name="QuranHubQuiz" position="0,0" size="%d,%d" flags="wfNoBorder" backgroundColor="%s" title="مسابقة القرآن">' % (p(1280), p(720), bg)]
+
+        def lab(name, x, y, w, h, fs, fg, bgc, ha="center", extra=u""):
+            o.append(u'<widget name="%s" position="%d,%d" size="%d,%d" font="Regular;%d" halign="%s" valign="center" '
+                     u'foregroundColor="%s" backgroundColor="%s" zPosition="2" %s/>' % (name, p(x), p(y), p(w), p(h), p(fs), ha, fg, bgc, extra))
+        lab("qz_title", 40, 20, 1200, 50, 30, gold, bg)
+        lab("qz_info", 40, 70, 1200, 34, 18, dim, bg)
+        o.append(u'<eLabel position="%d,%d" size="%d,%d" backgroundColor="%s" zPosition="1" />' % (p(60), p(116), p(1160), p(230), pan))
+        lab("qz_q", 80, 124, 1120, 60, 28, txt, pan)
+        o.append(u'<widget name="qz_ayah" position="%d,%d" size="%d,%d" alphatest="blend" zPosition="3" />' % (p(80), p(186), p(1120), p(150)))
+        lab("qz_ayah_t", 80, 186, 1120, 150, 26, txt, pan, extra=u'noWrap="0" ')
+        for i in range(4):
+            y = 362 + i * 70
+            o.append(u'<widget name="qz_k%d" position="%d,%d" size="%d,%d" backgroundColor="%s" zPosition="2" />' % (i, p(1150), p(y), p(70), p(58), self.COLS[i]))
+            lab("qz_n%d" % i, 1150, y, 70, 58, 26, "#ffffff", self.COLS[i])
+            o.append(u'<widget name="qz_b%d" position="%d,%d" size="%d,%d" backgroundColor="%s" zPosition="1" />' % (i, p(60), p(y), p(1086), p(58), pan))
+            lab("qz_o%d" % i, 80, y, 1050, 58, 26, txt, pan, ha="right")
+        lab("qz_why", 60, 646, 1160, 34, 20, gold, bg)
+        lab("qz_keys", 60, 682, 1160, 30, 16, dim, bg)
+        o.append(u"</screen>")
+        self.skin = u"".join(o)
+        Screen.__init__(self, session)
+        self.skinName = "QuranHubQuiz"
+        for n in ["qz_title", "qz_info", "qz_q", "qz_ayah_t", "qz_why", "qz_keys"] + \
+                ["qz_n%d" % i for i in range(4)] + ["qz_o%d" % i for i in range(4)]:
+            self[n] = Label(u"")
+        for i in range(4):
+            self["qz_k%d" % i] = Label(u"")
+            self["qz_b%d" % i] = Label(u"")
+        self["qz_ayah"] = Pixmap()
+        self.qz_level = int(BG.cfg.get("quiz_level", 1))
+        self.qz_player = BG.cfg.get("profile") or studio.profiles(BG.cfg)[0]
+        self.qz_q = None
+        self.qz_done = False
+        self.qz_round = [0, 0]                   # right, asked (this sitting)
+        self.qz_recent = []
+        acts = {"cancel": self.close, "ok": self.next_q, "mainMenu": self.menu,
+                "red": lambda: self.answer(0), "green": lambda: self.answer(1),
+                "yellow": lambda: self.answer(2), "blue": lambda: self.answer(3)}
+        for i in range(4):
+            acts[str(i + 1)] = (lambda k=i: self.answer(k))
+        self["actions"] = ActionMap(["OkCancelActions", "ColorActions", "NumberActions", "InfobarMenuActions"], acts, -1)
+        self.onLayoutFinish.append(self.start)
+
+    def start(self):
+        BG.hide_minibar()
+        self.next_q()
+
+    def header(self):
+        lv = dict(quiz.LEVELS).get(self.qz_level, u"")
+        self["qz_title"].setText(u"🧠 مسابقة القرآن  •  %s" % lv)
+        allr = ((BG.cfg.get("quiz") or {}).get("all") or {}).get(self.qz_player, [0, 0, 0])
+        self["qz_info"].setText(u"اللاعب: %s  •  هذه الجلسة %d/%d  •  مجموع نقاطه %d" % (
+            self.qz_player, self.qz_round[0], self.qz_round[1], allr[0]))
+
+    def next_q(self):
+        if self.qz_q is not None and not self.qz_done:
+            return                                # answer first
+        q = quiz.make(self.qz_level, avoid=self.qz_recent)
+        if not q:
+            self["qz_q"].setText(u"نص المصحف غير موجود على الجهاز")
+            return
+        self.qz_q, self.qz_done = q, False
+        self.qz_recent = (self.qz_recent + [q["q"] + q.get("ayah", u"")])[-30:]
+        self.header()
+        self["qz_q"].setText(q["q"])
+        self.show_ayah(q.get("ayah") or u"")
+        for i in range(4):
+            have = i < len(q["opts"])
+            self.paint(i, None)
+            self["qz_o%d" % i].setText(q["opts"][i] if have else u"")
+            self["qz_n%d" % i].setText(u"%d" % (i + 1) if have else u"")
+            for n in ("qz_o%d", "qz_n%d", "qz_k%d", "qz_b%d"):
+                (self[n % i].show if have else self[n % i].hide)()
+        self["qz_why"].setText(u"")
+        self["qz_keys"].setText(u"أجب بأزرار الألوان أو 1-4  •  MENU: المستوى واللاعب والترتيب  •  EXIT خروج")
+
+    def show_ayah(self, text):
+        self["qz_ayah"].hide()
+        self["qz_ayah_t"].setText(u"")
+        if not text:
+            return
+        shown = u"﴿%s﴾" % text
+        try:
+            if img_text():
+                h = p(64)
+                px = int(h / 1.85)
+                pix, iw = text_pixmap(shown, px, self.qz_th.get("ayah", 0xf2e6c4), h)
+                if pix is not None and iw <= p(1120):
+                    self["qz_ayah"].instance.setPixmap(pix)
+                    self["qz_ayah"].instance.resize(eSize(iw, h))
+                    self["qz_ayah"].instance.move(ePoint(p(80) + (p(1120) - iw) // 2, p(229)))
+                    self["qz_ayah"].show()
+                    return
+        except Exception as e:
+            qlog("quiz ayah: %r" % (e,))
+        self["qz_ayah_t"].setText(shown)
+
+    def paint(self, i, state):
+        """state: None (normal), True (the right answer), False (a wrong choice)."""
+        th = self.qz_th
+        col = {None: th.get("panel", th["bg"]), True: "#1e7a46", False: "#8a2a24"}[state]
+        try:
+            for n in ("qz_b%d" % i, "qz_o%d" % i):
+                self[n].instance.setBackgroundColor(parseColor(col))
+                self[n].instance.invalidate()
+        except Exception:
+            pass
+
+    def answer(self, k):
+        q = self.qz_q
+        if q is None or self.qz_done or k >= len(q["opts"]):
+            return
+        self.qz_done = True
+        right = k == q["ok"]
+        self.paint(q["ok"], True)
+        if not right:
+            self.paint(k, False)
+        self.qz_round[1] += 1
+        if right:
+            self.qz_round[0] += 1
+        quiz.score(BG.cfg, self.qz_player, right, self.qz_level)
+        if right and self.qz_round[0] % 5 == 0:
+            studio.star_add(BG.cfg, u"مسابقة القرآن: %d إجابات صحيحة" % self.qz_round[0])
+        BG.save()
+        self.header()
+        self["qz_why"].setText((u"✅ إجابة صحيحة!  " if right else u"❌ الصحيح: %s  •  " % q["opts"][q["ok"]]) + q.get("why", u""))
+        self["qz_keys"].setText(u"OK: السؤال التالي  •  MENU: المستوى واللاعب والترتيب  •  EXIT خروج")
+
+    def menu(self):
+        it = [(u"المستوى: %s ..." % dict(quiz.LEVELS)[self.qz_level], self.pick_level),
+              (u"اللاعب: %s ..." % self.qz_player, self.pick_player),
+              (u"🏆 الترتيب", self.board),
+              (u"سؤال آخر", lambda: (setattr(self, "qz_done", True), self.next_q()))]
+        from Screens.ChoiceBox import ChoiceBox
+        self.session.openWithCallback(lambda c: c and c[1](), ChoiceBox, title=u"مسابقة القرآن", list=it)
+
+    def pick_level(self):
+        def done(c):
+            if c:
+                self.qz_level = c[1]
+                BG.cfg["quiz_level"] = c[1]
+                BG.save()
+                self.qz_done = True
+                self.next_q()
+        from Screens.ChoiceBox import ChoiceBox
+        self.session.openWithCallback(done, ChoiceBox, title=u"المستوى", list=[(l, v) for v, l in quiz.LEVELS])
+
+    def pick_player(self):
+        names = studio.profiles(BG.cfg)
+
+        def done(c):
+            if c:
+                self.qz_player = c[1]
+                self.qz_round = [0, 0]
+                self.header()
+        from Screens.ChoiceBox import ChoiceBox
+        self.session.openWithCallback(done, ChoiceBox, title=u"من يجيب؟ (الملفات الشخصية للأسرة)", list=[(n, n) for n in names])
+
+    def board(self):
+        from Screens.MessageBox import MessageBox
+        self.session.open(MessageBox, quiz.board_text(BG.cfg), MessageBox.TYPE_INFO)
+
+
+HEALTH_HOSTS = (("mp3quran", "https://mp3quran.net/api/v3/languages"),
+                ("quran.com", "https://api.quran.com/api/v4/chapters/1"),
+                ("alquran.cloud", "https://api.alquran.cloud/v1/meta"),
+                ("GitHub", "https://raw.githubusercontent.com/Saadmelshepiny/SaadQuranHub/main/version.json"),
+                ("Telegram", "https://api.telegram.org"))
+
+
+def health_report(cfg):
+    """(background) the state of the receiver and of the plugin, in plain words."""
+    out = [u"🩺 صحة الجهاز والبلاجين  •  %s" % PLUGIN_VERSION, u""]
+    free = Hub31Bg.mem_free_mb()
+    total = None
+    try:
+        with open("/proc/meminfo") as f:
+            total = int(f.readline().split()[1]) // 1024
+    except Exception:
+        pass
+    out.append(u"الذاكرة: %s ميجا متاحة من %s %s" % (free, total, u"✅" if (free or 0) > 60 else u"⚠️"))
+    for lab, d in ((u"/tmp (الرام)", "/tmp"), (u"الفلاش", "/"), (u"القرص", data.home_dir() or None)):
+        if not d:
+            out.append(u"%s: لا يوجد" % lab)
+            continue
+        try:
+            st = os.statvfs(d)
+            fr = st.f_bavail * st.f_frsize // (1024 * 1024)
+            out.append(u"%s: %d ميجا فارغة %s" % (lab, fr, u"✅" if fr > 30 else u"⚠️"))
+        except Exception:
+            pass
+    try:
+        la = open("/proc/loadavg").read().split()[:3]
+        out.append(u"حِمل المعالج: %s" % u" / ".join(la))
+    except Exception:
+        pass
+    sz = 0
+    for d in ("/tmp/sqh_text", "/tmp/sqh_ui"):
+        try:
+            sz += sum(os.path.getsize(os.path.join(d, f)) for f in os.listdir(d))
+        except Exception:
+            pass
+    out.append(u"صور البلاجين المؤقتة: %d ميجا" % (sz // (1024 * 1024)))
+    out.append(u"")
+    ff = syncpro.ffmpeg_path()
+    out.append(u"التزامن التلقائي (ffmpeg): %s" % (u"متاح ✅" if ff else u"غير مثبّت - ثبّته بالأمر: opkg install ffmpeg"))
+    out.append(u"تلاوات لها مزامنة محفوظة: %d" % syncpro.count())
+    if syncpro.AUTO.last:
+        n_, q_, x_ = syncpro.AUTO.last
+        out.append(u"آخر مزامنة تلقائية: سورة %s (%s)" % (data.surah_name(n_) if n_ else u"-",
+                                                         u"دقة %d%%" % int(q_ * 100) if q_ else u"لم تنجح"))
+    out.append(u"")
+    out.append(u"سرعة السيرفرات:")
+    for name, url in HEALTH_HOSTS:
+        t0 = time.time()
+        try:
+            data.http_get(url, timeout=8)
+            out.append(u"• %s: %d ms ✅" % (name, int((time.time() - t0) * 1000)))
+        except Exception as e:
+            ms = int((time.time() - t0) * 1000)
+            out.append(u"• %s: %s (%d ms)" % (name, u"لا يستجيب ❌" if ms > 7000 else u"يستجيب ✅", ms))
+    crash = cfg.get("crash_seen")
+    out.append(u"")
+    out.append(u"آخر انهيار للواجهة: %s" % (time.strftime("%Y-%m-%d %H:%M", time.localtime(float(crash)))
+                                           if crash and float(crash) < time.time() - 5 and cfg.get("crash_any") else u"لا يوجد ✅"))
+    return u"\n".join(out)
+
+
+def open_health(session):
+    from Screens.MessageBox import MessageBox
+    popup(u"جاري فحص الجهاز والسيرفرات ...", 3)
+    r = Runner()
+    _HEALTH_RUN[:] = [r]
+    r.run(lambda: health_report(BG.cfg),
+          lambda txt: session.open(MessageBox, txt, MessageBox.TYPE_INFO),
+          lambda e: popup(u"تعذّر الفحص: %s" % e, 5))
+
+
+_HEALTH_RUN = []
 
 
 class QHCinema(Screen):
@@ -9739,6 +10418,9 @@ class QuranHub(Screen):
                (u"🌾 حصاد الشهر", lambda: self.show_harvest("month")),
                (u"🌾 حصاد السنة", lambda: self.show_harvest("year")),
                (u"⭐ النجوم", self.show_stars),
+               (u"🧠 مسابقة القرآن (أسئلة واختيارات)", lambda: self.session.open(QHContest)),
+               (u"🧠 المسابقة • الختمة الجماعية • التزامن ...", self.menu31),
+               (u"🩺 صحة الجهاز والبلاجين", lambda: open_health(self.session)),
                (u"📡 مكتبتي لأجهزة البيت (DLNA) ...", self.menu_dlna),
                (u"🎓 التعلّم والترجمة الصوتية ...", self.menu_learn),
                (u"🏠 أجهزة البيت (أكثر من ريسيفر) ...", self.menu_house),
@@ -9751,6 +10433,62 @@ class QuranHub(Screen):
                (u"أدوات وتشخيص ...", self.menu_misc),
                (u"شاشة البطاقات", self.open_home_screen)]
         self._menu(u"القائمة الرئيسية", it)
+
+    def menu31(self):
+        cfg = BG.cfg
+        lv = dict(quiz.LEVELS).get(int(cfg.get("quiz_level", 1)), u"")
+        gs = BG.tg_groups()
+
+        def pick_time():
+            opts = [(u"إيقاف", u"")] + [(t, t) for t in ("08:00", "12:00", "16:00", "20:00", "21:00", "22:00")]
+
+            def done(c):
+                if c is not None:
+                    cfg["quiz_time"] = c[1]
+                    BG.save()
+                    BG.set_status(u"السؤال اليومي: %s" % (c[1] or u"متوقف"))
+            self._choice(u"وقت السؤال اليومي على تليجرام", opts, done)
+
+        def pick_level():
+            def done(c):
+                if c:
+                    cfg["quiz_level"] = c[1]
+                    BG.save()
+            self._choice(u"مستوى الأسئلة", [(l, v) for v, l in quiz.LEVELS], done)
+
+        def unlink():
+            def done(c):
+                if c:
+                    cfg["tg_groups"] = [g for g in gs if g["id"] != c[1]]
+                    BG.save()
+                    BG.set_status(u"أُلغي ربط %s" % c[0])
+            self._choice(u"إلغاء ربط مجموعة", [(g.get("title") or str(g["id"]), g["id"]) for g in gs], done)
+
+        def toggle(key, default, label):
+            cfg[key] = not cfg.get(key, default)
+            BG.save()
+            BG.set_status(u"%s: %s" % (label, u"يعمل" if cfg[key] else u"متوقف"))
+
+        def reset_week():
+            q = cfg.setdefault("quiz", {})
+            q["weekly"] = {}
+            BG.save()
+            BG.set_status(u"بدأ ترتيب أسبوعي جديد")
+
+        it = [(u"🧠 ابدأ المسابقة على التلفزيون", lambda: self.session.open(QHContest)),
+              (u"مستوى الأسئلة: %s ..." % lv, pick_level),
+              (u"السؤال اليومي على تليجرام: %s ..." % (cfg.get("quiz_time", "21:00") or u"متوقف"), pick_time),
+              (u"إرسال السؤال اليومي لي أيضاً (ليس للمجموعات فقط): %s" % (u"نعم" if cfg.get("quiz_owners", True) else u"لا"),
+               lambda: toggle("quiz_owners", True, u"السؤال اليومي لك")),
+              (u"🏆 الترتيب", lambda: self.session.open(MessageBox, quiz.board_text(cfg), MessageBox.TYPE_INFO)),
+              (u"تصفير ترتيب هذا الأسبوع", reset_week),
+              (u"مجموعات تليجرام المربوطة: %d%s" % (len(gs), u" (أضف البوت لمجموعة واكتب فيها /link)" if not gs else u" - إلغاء ربط ..."),
+               unlink if gs else (lambda: None)),
+              (u"🎯 التزامن التلقائي للآيات (ffmpeg): %s" % (u"يعمل" if cfg.get("auto_sync", True) else u"متوقف"),
+               lambda: toggle("auto_sync", True, u"التزامن التلقائي")),
+              (u"🩺 صحة الجهاز والبلاجين", lambda: open_health(self.session))]
+        from Screens.MessageBox import MessageBox
+        self._menu(u"المسابقة • الختمة • التزامن", it)
 
     def move_source(self, d):
         """Change the place of the selected source inside its group (remembered)."""
@@ -11067,7 +11805,10 @@ class QuranHub(Screen):
                    (u"ترجمة سورة %s (Saheeh International)" % nm, lambda: self.open_reader(n, "translation"))]
         it += [(u"المصحف بالصفحات (604 صفحة مثل المطبوع)", lambda: self.session.open(
                    QHMushaf, studio.page_of(n, 1) if n else BG.cfg.get("mushaf_page", 1))),
-               (u"وضع التلاوة السينمائي", lambda: self.session.open(QHCinema)),
+               (u"🎯 مزامنة الآيات يدوياً (OK عند بداية كل آية)", self.tap_start),
+              (u"⏱ تقديم / تأخير تظليل الآية (%+.1f ث)" % syncpro.offset_for(BG.cfg, BG.sync_reciter()), self.offset_menu),
+              (u"🗑 حذف مزامنة هذه التلاوة", self.sync_forget),
+              (u"وضع التلاوة السينمائي", lambda: self.session.open(QHCinema)),
                (u"بحث في نص القرآن ...", lambda: studio_search(self.session)),
                (u"اختيار سورة أخرى ...", self.reader_pick),
                (u"الأذكار والأدعية (حصن المسلم) ...", lambda: studio_adhkar_menu(self.session)),
@@ -11918,7 +12659,8 @@ class QHPlayer(Screen):
         self.qp_wave_pct = None
         self.qp_paused = None
         self.qp_runner = Runner()
-        acts = {"cancel": self.close, "ok": BG.toggle_pause,
+        self.qp_tap = None
+        acts = {"cancel": self.key_cancel, "ok": self.key_ok,
                 "left": lambda: self.seek(-10), "right": lambda: self.seek(10),
                 "up": lambda: self.seek(60), "down": lambda: self.seek(-60),
                 "red": self.close, "green": BG.toggle_pause, "yellow": self.tafsir_open,
@@ -12056,6 +12798,79 @@ class QHPlayer(Screen):
               (u"مشاركة الآية (QR)", lambda: BG.verse_now() and open_share(self.session, *BG.verse_now())),
               (u"⏹ إيقاف التشغيل", lambda: (BG.stop_play(), self.close()))]
         self._choice(u"المشغّل", [(l, f) for l, f in it], lambda c: c and c[1]())
+
+    # -- 3.1: tapping the start of each ayah --------------------------------------------------
+    def key_ok(self):
+        if self.qp_tap is None:
+            return BG.toggle_pause()
+        pp = BG.play_pos()
+        if not pp:
+            return
+        a = self.qp_tap.tap(pp[0])
+        if a is None:
+            return
+        if self.qp_tap.done():
+            return self.tap_save()
+        BG.set_status(u"🎯 الآية %d ✓  •  OK عند بداية الآية %d  •  EXIT للحفظ" % (a, a + 1))
+
+    def key_cancel(self):
+        if self.qp_tap is not None:
+            if self.qp_tap.marks:
+                return self.tap_save()
+            self.qp_tap = None
+            return BG.set_status(u"أُلغيت المزامنة اليدوية")
+        self.close()
+
+    def tap_start(self):
+        cur = BG.verse_now() if Player.active else None
+        item = BG.cur_item() if Player.active else {}
+        if not cur or BG.cur_live or item.get("tempo"):
+            return BG.set_status(u"المزامنة اليدوية لتلاوة سورة تعمل الآن (بالسرعة العادية)", notify=True)
+        n = cur[0]
+        self.qp_tap = syncpro.Tapper(n, studio.ayah_counts()[n - 1], studio.ayah_weights(n))
+        self.qp_tap_n = n
+        pp = BG.play_pos()
+        if pp and pp[0] > 1:
+            BG.seek(-pp[0])                     # from the start of the surah
+        if BG.is_paused():
+            BG.toggle_pause()
+        BG.set_status(u"🎯 اضغط OK عند بداية الآية 1 (بعد البسملة)  •  EXIT للحفظ أو الإلغاء", notify=True)
+
+    def tap_save(self):
+        tp, self.qp_tap = self.qp_tap, None
+        pp = BG.play_pos()
+        if not tp or not pp or pp[1] <= 0:
+            return BG.set_status(u"لم تُحفظ المزامنة")
+        url, _src = BG.sync_src()
+        tl = tp.timing(pp[1])
+        if not tl:
+            return BG.set_status(u"لم تُحفظ المزامنة")
+        syncpro.put(url, self.qp_tap_n, pp[1], tl, "tap", 1.0)
+        self.qp_verse = None
+        BG.set_status(u"✅ حُفظت مزامنة %d آية لهذه التلاوة - التظليل الآن دقيق" % len(tp.marks), notify=True)
+
+    def offset_menu(self):
+        rec = BG.sync_reciter()
+        cur = syncpro.offset_for(BG.cfg, rec)
+        it = [(u"أبكر 1 ثانية", -1.0), (u"أبكر نصف ثانية", -0.5), (u"أبطأ نصف ثانية", 0.5),
+              (u"أبطأ 1 ثانية", 1.0), (u"بدون تعديل (0)", None)]
+
+        def done(c):
+            if not c:
+                return
+            v = syncpro.set_offset(BG.cfg, rec, delta=c[1]) if c[1] is not None else syncpro.set_offset(BG.cfg, rec, value=0.0)
+            BG.save()
+            self.qp_verse = None
+            BG.set_status(u"⏱ تظليل الآية لـ %s: %+.1f ثانية" % (rec or u"هذا القارئ", v), notify=True)
+        self._choice(u"تقديم / تأخير التظليل - الآن %+.1f ث" % cur, it, done)
+
+    def sync_forget(self):
+        url, _src = BG.sync_src()
+        if not syncpro.get(url):
+            return BG.set_status(u"لا توجد مزامنة محفوظة لهذه التلاوة")
+        syncpro.forget(url)
+        self.qp_verse = None
+        BG.set_status(u"حُذفت مزامنة هذه التلاوة")
 
     def marks(self):
         ms = BG.cfg.get("marks", [])
